@@ -342,7 +342,6 @@ async function test(name, fn) {
       "zen.workspace.zentral.widgets.clock.enabled": false,
       "zen.workspace.zentral.widgets.date.enabled": false,
       "zen.workspace.zentral.widgets.weather.enabled": false,
-      "zen.workspace.zentral.widgets.boost.enabled": false,
       "zen.workspace.zentral.widgets.alpha.enabled": true,
     });
     const { api } = h.start();

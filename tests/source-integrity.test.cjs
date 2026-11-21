@@ -85,12 +85,16 @@ test("every shipped script parses", () => {
 test("every file the loader catalog names exists in the tree", () => {
   const catalog = read("loader/ZentralCatalog.js");
   const refs = [...catalog.matchAll(/\b(?:file|css|source|path):\s*"([^"]+)"/g)].map((m) => m[1]);
+  for (const match of catalog.matchAll(/\bextraSources:\s*\[([^\]]*)\]/gs))
+    refs.push(...[...match[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]));
   const paths = [...new Set(refs)].filter((p) => !/^[a-z]+:/i.test(p) && /\.[a-z0-9]+$/i.test(p));
   const missing = paths.filter((p) => !fs.existsSync(path.join(ROOT, p)));
   assert.ok(paths.length > 40, `expected the catalog file list, found only ${paths.length}`);
   assert.equal(missing.length, 0, "catalog entries with no file:\n" + missing.join("\n"));
   // The one that actually broke: the runtime asks the catalog for a feature source and loads it by this path.
   assert.ok(paths.includes("additional/boost/ZentralBoost.uc.js"), "the Boost source stays in the catalog");
+  assert.ok(paths.includes("additional/boost/ZentralBoostWidget.js"), "the Boost-owned widget source stays in the catalog");
+  assert.ok(paths.includes("loader/ZentralSidebarMount.js"), "the shared safe mount selector stays in the catalog");
 });
 
 for (const [name, fn] of tests) {

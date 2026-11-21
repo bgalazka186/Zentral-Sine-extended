@@ -158,7 +158,6 @@ test("Week view shows all seven forecast rows without an inner scroll area", () 
     "zen.workspace.zentral.widgets.enabled": true,
     "zen.workspace.zentral.widgets.clock.enabled": false,
     "zen.workspace.zentral.widgets.date.enabled": false,
-    "zen.workspace.zentral.widgets.boost.enabled": false,
     "zen.workspace.zentral.widgets.weather.enabled": true,
     "zen.workspace.zentral.widgets.weather.places": places,
     "zen.workspace.zentral.widgets.weather.units": "metric",

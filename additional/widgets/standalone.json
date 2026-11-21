@@ -60,12 +60,6 @@
     "zen.workspace.zentral.widgets.clock.mode",
     "zen.workspace.zentral.widgets.timer.end_sound",
     "zen.workspace.zentral.widgets.timer.end_notice",
-    {
-      "type": "text",
-      "label": "**Boost**",
-      "size": "16px"
-    },
-    "zen.workspace.zentral.widgets.boost.enabled",
     "zen.workspace.zentral.widgets.language",
     "zen.workspace.zentral.notes.language",
     {
@@ -84,12 +78,14 @@
     "zen.workspace.zentral.widgets.appearance.text",
     "zen.workspace.zentral.widgets.pause_when_hidden"
   ],
+  "sharedSources": [
+    "loader/ZentralSidebarMount.js"
+  ],
   "externalPrefs": [
     "zen.workspace.zentral.widgets.timer.enabled",
-    "zen.workspace.zentral.widgets.status.enabled",
     "zen.workspace.zentral.widgets.weather.view"
   ],
-  "externalPrefsReason": "OW-60 reads the retired standalone Timer card pref once, to put that owner on the Clock's timer face. OW-90 reads the retired Status card's enabled pref once, to carry that owner's choice over to Boost. OW-109 stores the user's active weather view selection independently from weather.default_view without adding a duplicate control to Settings.",
+  "externalPrefsReason": "OW-60 reads the retired standalone Timer card pref once, to put that owner on the Clock's timer face. OW-109 stores the user's active weather view selection independently from weather.default_view without adding a duplicate control to Settings.",
   "borrowedSettings": [
     {
       "from": "additional/notes/settings.json",

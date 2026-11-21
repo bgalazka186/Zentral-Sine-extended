@@ -9,20 +9,22 @@
   "settings": "settings.json",
   "css": "ZentralBoostWidget.css",
   "loader": "__zentralBoostLoader",
-  "extras": [
-    "standalone/ZentralBoostWidget.js"
+  "include": [
+    "ZentralBoostWidget.js"
   ],
   "tags": [
     "memory",
     "zen"
   ],
   "sharedSources": [
-    "loader/ZentralTabPolicy.js"
+    "loader/ZentralTabPolicy.js",
+    "loader/ZentralSidebarMount.js"
   ],
   "externalPrefs": [
-    "zen.workspace.zentral.boost.keep_pinned"
+    "zen.workspace.zentral.boost.keep_pinned",
+    "zen.workspace.zentral.widgets.boost.enabled"
   ],
-  "externalPrefsReason": "OW-112 reads the retired keep_pinned pref once, to carry an owner's existing 'on' choice over to unload_pinned and use it as a read-only fallback for one release. It is no longer a user-facing setting.",
+  "externalPrefsReason": "OW-112 reads the retired keep_pinned pref once, to carry an owner's existing 'on' choice over to unload_pinned and use it as a read-only fallback for one release. W5 reads the retired Widgets Boost toggle once to migrate a saved value to Boost's widget_enabled preference; it is never cleared or exposed as a second setting.",
   "fullPackOnly": [
     "Zentral"
   ],

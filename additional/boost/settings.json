@@ -14,8 +14,8 @@
     },
     {
       "property": "zen.workspace.zentral.boost.widget_enabled",
-      "label": "Show the standalone Boost card",
-      "description": "On by default in a standalone Boost install. Turn it off to hide the Boost-owned card; the Widgets tray still owns the single Boost card when it is installed. Does not add a second card to the full pack.",
+      "label": "Show the Boost widget",
+      "description": "On by default. Turn it off to hide the Boost-owned sidebar tile in the full pack or a standalone Boost install. On first start, a saved Sidebar Widgets Boost toggle is copied here only when this preference has no saved value; the old preference is left untouched.",
       "type": "checkbox",
       "defaultValue": true
     },

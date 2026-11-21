@@ -353,8 +353,6 @@ function createClockDateHarness(initialPrefs = {}, startMs = Date.UTC(2026, 10, 
     const h = createClockDateHarness(
       {
         "zen.workspace.zentral.widgets.enabled": true,
-        // OW-90's Boost card ships on and would be the third child otherwise; this test is about the two time cards.
-        "zen.workspace.zentral.widgets.boost.enabled": false,
         "zen.workspace.zentral.widgets.clock.format": "24h",
         "zen.workspace.zentral.widgets.date.format": "iso",
       },

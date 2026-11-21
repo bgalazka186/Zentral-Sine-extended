@@ -1,7 +1,7 @@
-/* G10: standalone Boost card. Declared by additional/boost/standalone.json as the
- * package's `css`; the full pack never loads this file. OW-121's one-row rule is
- * kept: the value, label and all four actions stay on a 26 px row. */
-#zentral-boost-standalone-anchor {
+/* Boost-owned sidebar widget. The standalone package and full-pack CSS catalog
+ * load this same stylesheet. OW-121's one-row rule keeps the value, label and all
+ * four actions on a 26 px row; fixed positioning below is only the no-target fallback anchor. */
+#zentral-boost-widget-anchor {
   position: fixed;
   width: 1px;
   height: 1px;
@@ -12,8 +12,8 @@
   pointer-events: none;
 }
 
-#zentral-boost-standalone-card,
-.zbsw-card {
+#zentral-boost-widget,
+.zbw-card {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -27,15 +27,37 @@
   border-radius: 6px;
 }
 
-#zentral-boost-standalone-card[hidden],
-.zbsw-card[hidden],
-.zbsw-hint[hidden],
-.zbsw-toast[hidden] {
+#zentral-boost-widget[hidden],
+.zbw-card[hidden],
+.zbw-toast[hidden] {
   display: none !important;
 }
 
-.zbsw-row,
-.zbsw-popup {
+#zentral-boost-widget.zbw-flow {
+  box-sizing: border-box !important;
+  contain: layout !important;
+  flex: 0 0 auto !important;
+  align-self: stretch !important;
+  width: calc(100% - 8px) !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  margin: 2px 4px !important;
+}
+
+/* Zen can slide the sidebar out of view without removing its DOM. Hide both
+   mount modes at the same compact/hidden boundary; CSS restores them as soon
+   as Zen reveals the sidebar again. */
+:root[zen-sidebar-hidden="true"] #zentral-boost-widget.zbw-flow,
+:root[zen-sidebar-hidden="true"] #zentral-boost-widget.zbw-fallback,
+:root[zen-sidebar-hidden="true"] #zentral-boost-widget-anchor,
+:root[zen-compact-mode="true"]:not([zen-compact-sidebar-visible="true"]):not([zen-sidebar-expanded="true"]) #zentral-boost-widget.zbw-flow,
+:root[zen-compact-mode="true"]:not([zen-compact-sidebar-visible="true"]):not([zen-sidebar-expanded="true"]) #zentral-boost-widget.zbw-fallback,
+:root[zen-compact-mode="true"]:not([zen-compact-sidebar-visible="true"]):not([zen-sidebar-expanded="true"]) #zentral-boost-widget-anchor {
+  display: none !important;
+}
+
+.zbw-row,
+.zbw-popup {
   display: flex !important;
   flex-direction: row !important;
   flex-wrap: nowrap !important;
@@ -46,13 +68,21 @@
   overflow: hidden !important;
 }
 
-.zbsw-value {
+.zbw-value {
   flex: 0 0 auto;
   font-weight: 700;
   white-space: nowrap;
 }
 
-.zbsw-label {
+.zbw-value[data-zbw-level="low"] {
+  color: color-mix(in srgb, #e5a04b 70%, currentColor);
+}
+
+.zbw-value[data-zbw-level="muted"] {
+  opacity: .6;
+}
+
+.zbw-label {
   flex: 0 1 auto;
   opacity: .78;
   white-space: nowrap;
@@ -60,13 +90,13 @@
   overflow: hidden;
 }
 
-.zbsw-popup {
+.zbw-popup {
   flex: 1 1 auto;
   justify-content: flex-end;
 }
 
-.zbsw-action,
-.zbsw-toast-action {
+.zbw-action,
+.zbw-toast-action {
   box-sizing: border-box;
   flex: 0 0 auto;
   height: 20px !important;
@@ -84,13 +114,12 @@
   cursor: pointer;
 }
 
-.zbsw-action[disabled] {
+.zbw-action[disabled] {
   opacity: .42;
   cursor: default;
 }
 
-.zbsw-hint,
-.zbsw-toast {
+.zbw-toast {
   box-sizing: border-box;
   max-width: 100%;
   padding: 0 2px;
@@ -98,16 +127,14 @@
   white-space: nowrap;
   text-overflow: ellipsis;
   overflow: hidden;
-}
 
-.zbsw-toast {
   display: flex;
   flex-direction: row;
   align-items: center;
   gap: 6px;
 }
 
-.zbsw-toast-line {
+.zbw-toast-line {
   flex: 1 1 auto;
   white-space: nowrap;
   text-overflow: ellipsis;

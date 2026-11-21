@@ -3449,6 +3449,8 @@
       const r = records.get(m.id);
       if (!r.enabledAtStart) continue;
       try {
+        for (const source of m.extraSources || [])
+          moduleLoader.load(source, { owner: m.id });
         if (m.file) moduleLoader.load(m.file, { owner: m.id });
         r.state = "loaded";
       } catch (e) {

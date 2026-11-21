@@ -1134,6 +1134,123 @@ function nativeSidebarSide() {
   return shim;
 })();
 
+// ---- shared: loader/ZentralSidebarMount.js
+/* Shared, pure safe insertion-point selection for sidebar chrome.
+ *
+ * The result is { parent, before, anchorId }; callers decide how to mount and
+ * observe their own node. Keeping selection here gives sidebar features the
+ * same anchor priority and video-player adjacency rule. */
+(function installZentralSidebarMount(targetWindow) {
+  "use strict";
+
+  const VIDEO_PLAYER_ID = "zentral-video-preview";
+  const ANCHOR_IDS = Object.freeze([
+    "zen-media-controls-toolbar",
+    "zen-sidebar-bottom-buttons",
+    "tabbrowser-tabs",
+    "vertical-tabs",
+  ]);
+  const VIDEO_ANCHOR_IDS = new Set(ANCHOR_IDS);
+
+  function safeStyle(element, win) {
+    if (!element || typeof win?.getComputedStyle !== "function") return null;
+    try {
+      return win.getComputedStyle(element);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function safeRect(element) {
+    if (!element || typeof element.getBoundingClientRect !== "function") return null;
+    try {
+      const rect = element.getBoundingClientRect();
+      return rect && [rect.top, rect.bottom, rect.left, rect.right, rect.width, rect.height].every(Number.isFinite)
+        ? rect
+        : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function isElementHidden(element, win) {
+    if (!element || element.hidden) return true;
+    const style = safeStyle(element, win);
+    return Boolean(style && (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse"));
+  }
+
+  function isAncestorVisible(element, win) {
+    for (let parent = element?.parentElement || element?.parentNode; parent; parent = parent.parentElement || parent.parentNode) {
+      if (parent.hidden) return false;
+      const style = safeStyle(parent, win);
+      if (style?.display === "none" || style?.visibility === "collapse") return false;
+    }
+    return true;
+  }
+
+  function resolveTabsHost(doc, win) {
+    if (!doc || typeof doc.getElementById !== "function") return null;
+    const candidates = [
+      doc.getElementById("tabbrowser-tabs"),
+      doc.getElementById("vertical-tabs"),
+    ].filter(Boolean);
+    if (!candidates.length) return null;
+
+    for (const element of candidates) {
+      if (isElementHidden(element, win)) continue;
+      const rect = safeRect(element);
+      if (!rect || rect.height > 0) return element;
+    }
+    for (const element of candidates) {
+      if (!isElementHidden(element, win)) return element;
+    }
+    return candidates[0];
+  }
+
+  function chooseBottomMount(doc, win, fallbackSidebar = null) {
+    if (!doc || typeof doc.getElementById !== "function") return null;
+
+    const media = doc.getElementById("zen-media-controls-toolbar");
+    if (media?.parentNode && isAncestorVisible(media, win)) {
+      return { parent: media.parentNode, before: media, anchorId: "zen-media-controls-toolbar" };
+    }
+
+    const bottom = doc.getElementById("zen-sidebar-bottom-buttons");
+    if (bottom?.parentNode && isAncestorVisible(bottom, win)) {
+      return { parent: bottom.parentNode, before: bottom, anchorId: "zen-sidebar-bottom-buttons" };
+    }
+
+    const video = doc.getElementById(VIDEO_PLAYER_ID);
+    const tabs = resolveTabsHost(doc, win);
+    if (tabs?.parentNode && isAncestorVisible(tabs, win)) {
+      let before = tabs.nextSibling;
+      // If the player follows the tab anchor, insert after the player, never between the pair.
+      if (before?.id === VIDEO_PLAYER_ID) before = before.nextSibling;
+      return { parent: tabs.parentNode, before: before || null, anchorId: tabs.id || "tabs" };
+    }
+
+    if (video?.parentNode && isAncestorVisible(video, win)) {
+      const previous = video.previousSibling;
+      if (previous && VIDEO_ANCHOR_IDS.has(previous.id)) {
+        return { parent: video.parentNode, before: video.nextSibling || null, anchorId: VIDEO_PLAYER_ID + ":after" };
+      }
+      return { parent: video.parentNode, before: video, anchorId: VIDEO_PLAYER_ID + ":before" };
+    }
+
+    const sidebar = doc.getElementById("navigator-toolbox") || fallbackSidebar || null;
+    if (sidebar) {
+      return { parent: sidebar, before: null, anchorId: sidebar.id || "sidebar" };
+    }
+    return null;
+  }
+
+  targetWindow.__zentralSidebarMount = Object.freeze({
+    chooseBottomMount,
+    anchorIds: ANCHOR_IDS,
+    videoPlayerId: VIDEO_PLAYER_ID,
+  });
+})(window);
+
 /*
  * ZENTRAL FILE GUIDE - additional/widgets/ZentralWidgets.uc.js
  *
@@ -1189,8 +1306,6 @@ function nativeSidebarSide() {
     WEATHER_DEFAULT_VIEW: "zen.workspace.zentral.widgets.weather.default_view",
     WEATHER_VIEW: "zen.workspace.zentral.widgets.weather.view",
     TIMER_ENABLED: "zen.workspace.zentral.widgets.timer.enabled",
-    // Retired by OW-90 with the card it belonged to; read once so an owner's choice survives the swap.
-    LEGACY_STATUS_ENABLED: "zen.workspace.zentral.widgets.status.enabled",
     TIMER_CLICK_STOPWATCH: "zen.workspace.zentral.widgets.timer.click_stopwatch",
     CLOCK_QUICK_NOTE: "zen.workspace.zentral.widgets.clock.quick_note",
     ORDER: "zen.workspace.zentral.widgets.order",
@@ -1203,9 +1318,6 @@ function nativeSidebarSide() {
     CLOCK_MODE: "zen.workspace.zentral.widgets.clock.mode",
     TIMER_END_SOUND: "zen.workspace.zentral.widgets.timer.end_sound",
     TIMER_END_NOTICE: "zen.workspace.zentral.widgets.timer.end_notice",
-    // OW-90: the Status card is gone — Boost replaces it. The memory reading moved into `additional/boost/`, where the
-    // number and the action that lowers it live together; the battery reading left with the card (a desktop has none).
-    BOOST_ENABLED: "zen.workspace.zentral.widgets.boost.enabled",
     // OW-64: one language for every widget. "auto" follows the Notes interface language, so the two never disagree
     // until the person says otherwise; anything else is their own choice and stays their own choice.
     LANGUAGE: "zen.workspace.zentral.widgets.language",
@@ -1247,7 +1359,6 @@ function nativeSidebarSide() {
     CLOCK_MODE: "clock",
     TIMER_END_SOUND: "beep",
     TIMER_END_NOTICE: "none",
-    BOOST_ENABLED: true,
     LANGUAGE: "auto",
   });
 
@@ -1268,50 +1379,6 @@ function nativeSidebarSide() {
       "clock.title": "Clock",
       "date.title": "Date",
       "weather.title": "Weather",
-      "boost.title": "Boost",
-      "boost.aria": "{value} of browser memory in use. Click to free memory.",
-      "boost.ariaUnknown": "Browser memory reading unavailable. Click to free memory.",
-      "boost.free": "Free memory (light)",
-      "boost.busy": "Freeing memory\u2026",
-      "boost.freed": "Freed {mb} MB",
-      "boost.nothingFreed": "Memory was already tidy",
-      "boost.unknown": "Memory freed. This build cannot measure it.",
-      "boost.deep": "Free memory (deep)",
-      "boost.deepSoon": "Needs the shared tab policy",
-      "boost.deepDone": "Put {tabs} tab(s) and {panels} panel(s) to sleep, freed {mb} MB",
-      "boost.skipped": "Last deep pass kept: {reasons}",
-      "boost.loaded": "Loaded tabs: {pinned} pinned, {unpinned} unpinned",
-      "boost.restoreCount": "Restore ({count})",
-      "boost.restored": "Woke {count} panel(s)",
-      "boost.restoredTabs": "{count} sleeping tab(s) ready to reload on click",
-      "boost.limitHit": "{mb} MB in use, above your {limit} MB limit. Open Boost to free memory.",
-      "boost.limitDone": "Freed memory down to {mb} MB",
-      "boost.limitNothing": "Memory is high, but nothing else may be unloaded",
-      "boost.restore": "Restore",
-      "boost.restoreSoon": "Nothing to restore yet",
-      "boost.gameMode": "Game Mode",
-      "boost.gameModeOn": "Game Mode on \u2014 timers paused, background tabs idle",
-      "boost.gameModeOff": "Game Mode off \u2014 everything back to normal",
-      // G7: the preview, the G8 final report and the OFF toast belong to BOTH Boost card owners.
-      "boost.gamePreview": "Will free about {tabs} tabs and {panels} apps before Game Mode starts",
-      "boost.gameFeedback": "Game Mode: freed {mb} MB \u00b7 {tabs} tabs, {panels} apps unloaded \u00b7 kept: {kept}",
-      "boost.gameStarting": "Game Mode: freeing memory\u2026",
-      "boost.gameFeedbackOff": "Game Mode off",
-      "boost.keptNone": "none",
-      "boost.keptMore": "+{count} more",
-      "boost.gameRestoreAction": "Restore",
-      "boost.restoreSnapshot": "Restore ({panels} apps, {tabs} tabs)",
-      "boost.later": "Boost levels: Light, Deep, Game Mode and Restore",
-      "boost.levels": "Boost levels and Restore",
-      "boost.shortLight": "Light",
-      "boost.shortDeep": "Deep",
-      "boost.shortGame": "Game",
-      "boost.shortRestore": "Restore",
-      "boost.levelLight": "Light: GC/CC + memory minimize. No tabs touched.",
-      "boost.levelDeep": "Deep: Light clean first, then eligible tabs sleep. Restore available.",
-      "boost.levelGame": "Game Mode: pauses repeating features and idles non-essential browsers.",
-      "boost.levelRestore": "Restore: reloads what was unloaded - panels as panels, tabs as tabs.",
-      "boost.resultSkipped": " \u00b7 skipped {count} protected tab(s)",
       "tray.label": "Sidebar widgets",
       "tray.move": "Move this widget",
       "tray.moveUp": "Move this widget up",
@@ -1357,49 +1424,6 @@ function nativeSidebarSide() {
       "clock.title": "Zegar",
       "date.title": "Data",
       "weather.title": "Pogoda",
-      "boost.title": "Boost",
-      "boost.aria": "Pami\u0119\u0107 przegl\u0105darki: {value}. Kliknij, aby j\u0105 zwolni\u0107.",
-      "boost.ariaUnknown": "Odczyt pami\u0119ci niedost\u0119pny. Kliknij, aby zwolni\u0107 pami\u0119\u0107.",
-      "boost.free": "Zwolnij pami\u0119\u0107 (lekko)",
-      "boost.busy": "Zwalnianie pami\u0119ci\u2026",
-      "boost.freed": "Zwolniono {mb} MB",
-      "boost.nothingFreed": "Pami\u0119\u0107 by\u0142a ju\u017c uporz\u0105dkowana",
-      "boost.unknown": "Pami\u0119\u0107 zwolniona. Ta wersja nie potrafi jej zmierzy\u0107.",
-      "boost.deep": "Zwolnij pami\u0119\u0107 (g\u0142\u0119boko)",
-      "boost.deepSoon": "Wymaga wsp\u00f3lnej polityki kart",
-      "boost.deepDone": "U\u015bpiono {tabs} kart i {panels} paneli, zwolniono {mb} MB",
-      "boost.skipped": "Ostatnie g\u0142\u0119bokie czyszczenie zostawi\u0142o: {reasons}",
-      "boost.loaded": "Wczytane karty: {pinned} przypi\u0119tych, {unpinned} nieprzypi\u0119tych",
-      "boost.restoreCount": "Przywr\u00f3\u0107 ({count})",
-      "boost.restored": "Obudzono {count} paneli",
-      "boost.restoredTabs": "{count} u\u015bpionych kart wczyta si\u0119 po klikni\u0119ciu",
-      "boost.limitHit": "W u\u017cyciu {mb} MB, powy\u017cej limitu {limit} MB. Otw\u00f3rz Boost, aby zwolni\u0107 pami\u0119\u0107.",
-      "boost.limitDone": "Zwolniono pami\u0119\u0107 do {mb} MB",
-      "boost.limitNothing": "Pami\u0119\u0107 jest wysoka, ale nie ma ju\u017c czego zwalnia\u0107",
-      "boost.restore": "Przywr\u00f3\u0107",
-      "boost.restoreSoon": "Nie ma jeszcze czego przywraca\u0107",
-      "boost.gameMode": "Tryb gry",
-      "boost.gameModeOn": "Tryb gry w\u0142\u0105czony \u2014 liczniki wstrzymane, karty w tle bezczynne",
-      "boost.gameModeOff": "Tryb gry wy\u0142\u0105czony \u2014 wszystko wraca do normy",
-      "boost.gamePreview": "U\u015bpi oko\u0142o {tabs} kart i {panels} aplikacji przed w\u0142\u0105czeniem Trybu gry",
-      "boost.gameFeedback": "Tryb gry: zwolniono {mb} MB \u00b7 {tabs} kart, {panels} aplikacji u\u015bpionych \u00b7 zachowano: {kept}",
-      "boost.gameStarting": "Tryb gry: zwalnianie pami\u0119ci\u2026",
-      "boost.gameFeedbackOff": "Tryb gry wy\u0142\u0105czony",
-      "boost.keptNone": "brak",
-      "boost.keptMore": "+{count} wi\u0119cej",
-      "boost.gameRestoreAction": "Przywr\u00f3\u0107",
-      "boost.restoreSnapshot": "Przywr\u00f3\u0107 ({panels} aplikacji, {tabs} kart)",
-      "boost.later": "Poziomy Boost: Lekko, Głęboko, Tryb gry i Przywróć",
-      "boost.levels": "Poziomy Boost i Przywróć",
-      "boost.shortLight": "Lekko",
-      "boost.shortDeep": "Głęboko",
-      "boost.shortGame": "Gra",
-      "boost.shortRestore": "Przywróć",
-      "boost.levelLight": "Lekko: GC/CC i minimalizacja pamięci. Karty nie są ruszane.",
-      "boost.levelDeep": "Głęboko: najpierw lekkie czyszczenie, potem usypianie kart. Dostępne Przywróć.",
-      "boost.levelGame": "Tryb gry: wstrzymuje cykliczne funkcje i wygasza niepotrzebne karty.",
-      "boost.levelRestore": "Przywróć: wczytuje to, co zostało uśpione \u2014 panele jako panele, karty jako karty.",
-      "boost.resultSkipped": " \u00b7 pominięto {count} chronionych kart",
       "tray.label": "Widgety panelu bocznego",
       "tray.move": "Przenieś ten widget",
       "tray.moveUp": "Przenieś ten widget wyżej",
@@ -2338,6 +2362,13 @@ function nativeSidebarSide() {
    */
   function chooseWidgetMountTarget(doc, win, fallbackSidebar) {
     if (!doc || typeof doc.getElementById !== "function") return null;
+    const chooseBottom = window.__zentralSidebarMount?.chooseBottomMount;
+    if (typeof chooseBottom === "function") {
+      try {
+        const sharedTarget = chooseBottom(doc, win, fallbackSidebar);
+        if (sharedTarget) return sharedTarget;
+      } catch (_) {}
+    }
 
     const media = doc.getElementById("zen-media-controls-toolbar");
     if (media?.parentNode && isAncestorVisible(media, win)) {
@@ -3108,212 +3139,6 @@ function nativeSidebarSide() {
       activeTimerCount,
       destroy,
     };
-  }
-
-  // ---- OW-90: the Boost card -- ---------------------------------------------------------------------------------
-  // Boost is a number and one action. The number comes from `additional/boost/` (the only place that knows how to ask
-  // the browser for its real total), so this card owns no reading of its own and no timer: the module's sampler runs
-  // only while the popup is open, and `onChange` is how the card hears about it.
-
-  // The compact line: "412 MB" while the reading is small, "1.4 GB" once it outgrows a megabyte count. A reading that
-  // does not exist is a dash, never a zero — the plan's rule, and the same one the retired Status card followed.
-  function boostParts(mb) {
-    const value = Number(mb);
-    if (!Number.isFinite(value) || value <= 0) return null;
-    const text = value >= 1000 ? (Math.round(value / 100) / 10).toFixed(1) + " GB" : Math.round(value) + " MB";
-    // The level is the one thing this card grades: a browser near the machine's limit is worth a colour, and the
-    // number alone cannot say that (it has no limit to compare against), so the grade only says "growing".
-    return { mb: Math.round(value), text, level: value >= 4096 ? "low" : "ok" };
-  }
-
-  // OW-115: the deep pass already names every reason it skipped a tab for. Group the counts (not the bounded
-  // five-entry sample) into one deterministic line, biggest reason first. Pure: no DOM, no prefs, no timers.
-  function boostSkippedLine(reasons) {
-    if (!reasons || typeof reasons !== "object") return "";
-    const entries = Object.entries(reasons)
-      .map(([reason, count]) => [String(reason), Number(count) || 0])
-      .filter(([, count]) => Number.isFinite(count) && count > 0)
-      .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
-    return entries.map(([reason, count]) => `${reason}: ${count}`).join(" \u00b7 ");
-  }
-
-  // OW-121: the post-run line uses the FULL grouped skip counts, never OW-115's bounded five-entry sample. Pure,
-  // so an unreadable result cannot invent a number and the toast stays one short line.
-  function boostSkippedCount(result) {
-    const counts = result && typeof result === "object" ? result.skippedCounts : null;
-    if (!counts || typeof counts !== "object") return 0;
-    return Object.values(counts).reduce((sum, value) => {
-      const count = Number(value);
-      return Number.isFinite(count) && count > 0 ? sum + Math.floor(count) : sum;
-    }, 0);
-  }
-
-  // What a plain click means. Pure, so the rule is testable without a sidebar: a click while the module works does
-  // nothing (a second GC while the first settles is exactly the kind of pile-up the plan forbids), a click otherwise
-  // runs the light pass.
-  function resolveBoostClick(opts = {}) {
-    if (opts.enabled === false) return { action: "none" };
-    if (!opts.available) return { action: "none", reason: "module-missing" };
-    if (opts.running) return { action: "none", reason: "busy" };
-    return { action: "free", level: 1 };
-  }
-
-  // The menu, as data. The plan's rule is that the entries that do not work yet are shown greyed rather than hidden,
-  // so a person cannot think part three already shipped; `available: false` is what draws them disabled.
-  function boostMenuItems(opts = {}) {
-    const lang = resolveWidgetLanguage(opts.language, opts.notesRaw);
-    const running = Boolean(opts.running);
-    // OW-91 made the deep pass real. `deep` is offered when the module can do it (it needs the shared tab policy) and
-    // `restore` only when something was actually put to sleep, so a greyed entry now means a fact, not "not yet".
-    const canDeep = opts.canDeep !== false;
-    const undoSize = Number(opts.undoSize) || 0;
-    const gameOn = Boolean(opts.gameMode && typeof opts.gameMode === "object" ? opts.gameMode.on : opts.gameMode);
-    // G7: a real G3/G5 snapshot wins over the older deep-pass undo count. Without one, older callers keep
-    // their exact four-entry menu and "Restore (N)" label.
-    const snapshot = opts.snapshot && typeof opts.snapshot === "object" ? boostGameModeSnapshot(opts.snapshot) : null;
-    const restoreLabel = snapshot
-      ? (snapshot.total ? widgetText(lang, "boost.restoreSnapshot", { panels: snapshot.panels, tabs: snapshot.tabs })
-          : widgetText(lang, "boost.restoreSoon"))
-      : undoSize ? widgetText(lang, "boost.restoreCount", { count: undoSize }) : widgetText(lang, "boost.restore");
-    // OW-115: after a deep pass, show WHY it kept tabs, plus how many loaded tabs are pinned vs not.
-    // With no skipped data the menu stays exactly the four entries every older test expects.
-    const skippedLine = boostSkippedLine(opts.skipped);
-    const loadedTabs = opts.loadedTabs && typeof opts.loadedTabs === "object" ? opts.loadedTabs : {};
-    const items = [
-      {
-        id: "free-light",
-        label: widgetText(lang, running ? "boost.busy" : "boost.free"),
-        shortLabel: running ? "\u2026" : widgetText(lang, "boost.shortLight"),
-        description: widgetText(lang, "boost.levelLight"),
-        level: "light",
-        available: !running,
-        primary: true,
-      },
-      {
-        id: "free-deep",
-        label: widgetText(lang, "boost.deep"),
-        shortLabel: widgetText(lang, "boost.shortDeep"),
-        description: widgetText(lang, "boost.levelDeep"),
-        level: "deep",
-        available: !running && canDeep,
-        hint: canDeep ? "" : widgetText(lang, "boost.deepSoon"),
-      },
-      {
-        // B7/OW-94: the Level 3 toggle. It is a switch, not a one-shot action, so its label says which way it will
-        // move — a menu entry that reads "Game Mode" and does the opposite of what a person expects is worse than none.
-        id: "game-mode",
-        label: widgetText(lang, "boost.gameMode"),
-        shortLabel: widgetText(lang, "boost.shortGame"),
-        description: widgetText(lang, "boost.levelGame"),
-        level: "game",
-        available: opts.canGameMode !== false,
-        checked: gameOn,
-        hint: gameOn ? widgetText(lang, "boost.gameModeOn") : "",
-      },
-      {
-        id: "restore",
-        label: restoreLabel,
-        shortLabel: widgetText(lang, "boost.shortRestore"),
-        description: widgetText(lang, "boost.levelRestore"),
-        available: !running && (snapshot ? snapshot.total > 0 : undoSize > 0),
-        hint: !running && (snapshot ? snapshot.total > 0 : undoSize > 0) ? "" : widgetText(lang, "boost.restoreSoon"),
-      },
-    ];
-    if (skippedLine) {
-      items.push({
-        id: "deep-skipped",
-        label: widgetText(lang, "boost.skipped", { reasons: skippedLine }),
-        available: false,
-        hint: widgetText(lang, "boost.loaded", {
-          pinned: Number(loadedTabs.pinned) || 0,
-          unpinned: Number(loadedTabs.unpinned) || 0,
-        }),
-      });
-    }
-    return items;
-  }
-
-  // The toast line after a run. `freedMB` is null when the build cannot measure memory at all: the run still
-  // happened, so the card says that instead of inventing a number. OW-121 adds the grouped protected-tab count
-  // as a suffix on the SAME line; it never appends a second card row or grows the widget's height.
-  function boostResultText(result, opts = {}) {
-    const lang = resolveWidgetLanguage(opts.language, opts.notesRaw);
-    const withSkipped = (text) => {
-      const count = boostSkippedCount(result);
-      return count ? text + widgetText(lang, "boost.resultSkipped", { count }) : text;
-    };
-    if (!result || typeof result !== "object") return withSkipped(widgetText(lang, "boost.unknown"));
-    // A deep pass says what it put to sleep as well as what it freed; the light pass has nothing to add.
-    if (result.by === "level2" && result.unloaded) {
-      const tabs = Number(result.unloaded.tabs) || 0;
-      const panels = Number(result.unloaded.panels) || 0;
-      if (tabs || panels) {
-        return withSkipped(widgetText(lang, "boost.deepDone", {
-          tabs,
-          panels,
-          mb: Number.isFinite(Number(result.freedMB)) ? Math.round(Number(result.freedMB)) : 0,
-        }));
-      }
-    }
-    // A finite `freedMB` is the answer; the two readings only matter when it is missing, which is exactly the
-    // "this build cannot measure memory" case — the run happened, so say that instead of inventing a number.
-    const freed = Number(result.freedMB);
-    if (result.freedMB == null || !Number.isFinite(freed)) return withSkipped(widgetText(lang, "boost.unknown"));
-    if (freed <= 0) return withSkipped(widgetText(lang, "boost.nothingFreed"));
-    return withSkipped(widgetText(lang, "boost.freed", { mb: Math.round(freed) }));
-  }
-
-  /* G7: the same pure feedback rules for the full-pack tray. Boost owns the measurement; these functions only
-   * turn its dry run, final state and snapshot into words. No DOM, pref, timer or platform read lives here. */
-  function boostGameModeNumber(value, fallback = 0) {
-    const n = Number(value);
-    return Number.isFinite(n) && n >= 0 ? Math.round(n) : fallback;
-  }
-  function boostGameModeSnapshot(snapshot) {
-    const s = snapshot && typeof snapshot === "object" ? snapshot : {};
-    return {
-      panels: boostGameModeNumber(s.panels, 0),
-      tabs: boostGameModeNumber(s.tabs, 0),
-      get total() { return this.panels + this.tabs; },
-    };
-  }
-  function boostGameModePreviewText(preview, opts = {}) {
-    const lang = resolveWidgetLanguage(opts.language, opts.notesRaw);
-    const counts = preview && typeof preview === "object" ? (preview.counts || preview) : {};
-    return widgetText(lang, "boost.gamePreview", {
-      tabs: boostGameModeNumber(counts.tabs, 0),
-      panels: boostGameModeNumber(counts.panels, 0),
-    });
-  }
-  function boostGameModeFeedbackText(state, opts = {}) {
-    const lang = resolveWidgetLanguage(opts.language, opts.notesRaw);
-    const s = state && typeof state === "object" ? state : {};
-    const unloaded = s.unloaded && typeof s.unloaded === "object" ? s.unloaded : {};
-    const kept = Array.isArray(s.kept) ? s.kept : [];
-    const names = kept.slice(0, 3).map((entry) => {
-      const row = entry && typeof entry === "object" ? entry : { id: entry };
-      return String(row.id || row.kind || "tab") + " (" + String(row.reason || "kept") + ")";
-    });
-    if (kept.length > 3) names.push(widgetText(lang, "boost.keptMore", { count: kept.length - 3 }));
-    return widgetText(lang, "boost.gameFeedback", {
-      mb: boostGameModeNumber(s.freedMB ?? s.finalFreedMB, 0),
-      tabs: boostGameModeNumber(unloaded.tabs, 0),
-      panels: boostGameModeNumber(unloaded.panels, 0),
-      kept: names.length ? names.join(", ") : widgetText(lang, "boost.keptNone"),
-    });
-  }
-  function boostRestoreSnapshotLabel(snapshot, opts = {}) {
-    const lang = resolveWidgetLanguage(opts.language, opts.notesRaw);
-    const s = boostGameModeSnapshot(snapshot);
-    return s.total
-      ? widgetText(lang, "boost.restoreSnapshot", { panels: s.panels, tabs: s.tabs })
-      : widgetText(lang, "boost.restoreSoon");
-  }
-  function boostGameModeOffText(snapshot, opts = {}) {
-    const lang = resolveWidgetLanguage(opts.language, opts.notesRaw);
-    const label = boostRestoreSnapshotLabel(snapshot, opts);
-    const line = widgetText(lang, "boost.gameFeedbackOff");
-    return label && label !== widgetText(lang, "boost.restoreSoon") ? line + " \u00b7 " + label : line;
   }
 
   // ---- T3.9d: stopwatch, quick timer and quick note -----------------------------------------------------------
@@ -4322,18 +4147,6 @@ function nativeSidebarSide() {
     readGeocodePayload,
     geocodeUrl,
     TIMER_PRESETS_MS,
-    boostParts,
-    resolveBoostClick,
-    boostSkippedLine,
-    boostSkippedCount,
-    boostMenuItems,
-    boostResultText,
-    boostGameModeNumber,
-    boostGameModeSnapshot,
-    boostGameModePreviewText,
-    boostGameModeFeedbackText,
-    boostRestoreSnapshotLabel,
-    boostGameModeOffText,
     cleanWidgetOrder,
     cleanWidgetColor, parseWidgetColor, contrastRatio, widgetAppearanceVars, CONTRAST_MIN,
     orderedByIds,
@@ -4456,24 +4269,9 @@ function nativeSidebarSide() {
       // OW-67: the previous "is the tray on screen" answer, so only a real transition repaints (never every measure).
       let wasVisible = false;
 
-      // G10: a standalone Boost publishes ONE marker. If the owner never made an explicit choice for the
-      // Widgets tray, the tray appears so it can own that Boost card. An explicit `widgets.enabled=false`
-      // still wins; no existing preference default is silently changed.
-      function externalBoostWantsTray() {
-        const marker = window.__zentralBoostStandaloneWidget;
-        if (!marker || typeof marker.visible !== "function") return false;
-        try {
-          if (typeof Services.prefs.prefHasUserValue === "function" &&
-              Services.prefs.prefHasUserValue(WIDGET_PREFS.ENABLED)) return false;
-          return Boolean(marker.visible());
-        } catch (_) {
-          return Boolean(marker.visible());
-        }
-      }
-
       function readConfig() {
         return {
-          enabled: getBool(WIDGET_PREFS.ENABLED, false) || externalBoostWantsTray(),
+          enabled: getBool(WIDGET_PREFS.ENABLED, false),
           maxHeightShare: clampInt(
             getInt(WIDGET_PREFS.MAX_HEIGHT_SHARE, 45),
             LIMITS.MAX_HEIGHT_SHARE[0],
@@ -5237,23 +5035,6 @@ function nativeSidebarSide() {
           if (!wasOn) return;
           if (getString(WIDGET_PREFS.CLOCK_MODE, DEFAULTS.CLOCK_MODE) === "timer") return;
           writeStringPref(WIDGET_PREFS.CLOCK_MODE, "timer");
-        } catch (_) {}
-      }
-
-      // OW-90: the Status card is replaced by Boost, so a person who had Status switched ON gets Boost switched on.
-      // A default of `false` for everybody was the Status card's accident (off unless asked); Boost ships on, and this
-      // step only makes sure an existing owner's explicit "yes" is not silently dropped by the swap. It never turns
-      // Boost off and it never touches a pref somebody already set for Boost.
-      function adoptLegacyStatusCard() {
-        try {
-          const def = registry.get("boost");
-          if (!def) return;
-          const legacyOn = getBool(WIDGET_PREFS.LEGACY_STATUS_ENABLED, false);
-          if (!legacyOn) return;
-          const type = Services.prefs.getPrefType?.(WIDGET_PREFS.BOOST_ENABLED);
-          // 0 = pref does not exist yet; only then does the old choice speak.
-          if (type) return;
-          Services.prefs.setBoolPref(WIDGET_PREFS.BOOST_ENABLED, true);
         } catch (_) {}
       }
 
@@ -6706,7 +6487,7 @@ function nativeSidebarSide() {
           if (widgetToastTimer !== null && typeof window.clearTimeout === "function") window.clearTimeout(widgetToastTimer);
           widgetToastTimer = null;
           if (typeof window.setTimeout !== "function") return;
-          // OW-90: the plan's own number for the Boost toast is 4 s.
+          // Keep the existing accessible toast duration.
           widgetToastTimer = window.setTimeout(() => {
             widgetToastTimer = null;
             clearWidgetToastAction();
@@ -6743,483 +6524,6 @@ function nativeSidebarSide() {
           long: Boolean(event?.shiftKey),
         });
       }
-
-      // ---- OW-90: the Boost card, which replaces the Status card -----------------------------------------------
-      // The number and the action live together: the card shows what the browser is using and one click hands memory
-      // back. Nothing here reads the platform itself — `additional/boost/` owns the only reading — and nothing here
-      // polls: the module samples every 2 s only while the popup is open, and every value arrives through `onChange`.
-      //
-      // The card is a convenience, never the only door: with the tray disabled the Boost module still works through
-      // its API and (in part three) its shortcut. The README of `additional/boost/` says so too.
-      const boostModule = () => {
-        try {
-          const api = window.ZentralBoost;
-          return api && typeof api.runLevel1 === "function" ? api : null;
-        } catch (_) {
-          return null;
-        }
-      };
-      let boostUnsubscribe = null;
-      let boostLastMB = null;
-      let boostRunning = false;
-      const boostWidgetDefinition = {
-        id: "boost",
-        title: tw("boost.title"),
-        showHeader: false,
-        order: 50,
-        pref: WIDGET_PREFS.BOOST_ENABLED,
-        defaultEnabled: DEFAULTS.BOOST_ENABLED,
-        // No cadence of its own: `fetch` answers from what the module last measured, so the scheduler never wakes the
-        // card for a reading it would have to take itself. A slow refresh is kept so a changed preference repaints.
-        refreshMs: 0,
-        create({ document: doc }) {
-          const wrap = doc.createElement("div");
-          wrap.className = "zw-boost";
-          const valueEl = doc.createElement("span");
-          valueEl.className = "zw-boost-value";
-          valueEl.textContent = "\u2014";
-          const labelEl = doc.createElement("span");
-          labelEl.className = "zw-boost-label";
-          labelEl.textContent = tw("boost.title");
-          const menuBtn = doc.createElement("button");
-          menuBtn.type = "button";
-          menuBtn.className = "zw-boost-menu-btn";
-          // OW-121: this is a compact level group, not a drop-down list. The same inline popup stays in normal
-          // flow, but its four buttons now sit on ONE row; "..." opens it, "Boost levels and Restore" names it.
-          menuBtn.setAttribute("aria-haspopup", "false");
-          menuBtn.setAttribute("aria-expanded", "false");
-          menuBtn.setAttribute("aria-label", tw("boost.levels"));
-          menuBtn.textContent = "\u22ef";
-          wrap.appendChild(valueEl);
-          wrap.appendChild(labelEl);
-          wrap.appendChild(menuBtn);
-
-          // The popup: a small list of what Boost can do. The entries that later parts add are drawn, greyed and
-          // explained — the plan's rule, and the reason a person can see that "deep" exists but is not ready.
-          const popup = doc.createElement("div");
-          popup.className = "zw-boost-popup";
-          popup.hidden = true;
-          popup.setAttribute("role", "group");
-          popup.setAttribute("aria-label", tw("boost.levels"));
-          wrap.appendChild(popup);
-
-          const paintValue = () => {
-            const parts = boostParts(boostLastMB);
-            valueEl.textContent = parts ? parts.text : "\u2014";
-            valueEl.setAttribute("data-zw-level", parts ? parts.level : "muted");
-            const lang = { language: getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE), notesRaw: getString(NOTES_LANGUAGE_PREF, "en") };
-            wrap.setAttribute("aria-label", parts
-              ? widgetText(resolveWidgetLanguage(lang.language, lang.notesRaw), "boost.aria", { value: parts.text })
-              : widgetText(resolveWidgetLanguage(lang.language, lang.notesRaw), "boost.ariaUnknown"));
-            wrap.setAttribute("data-zw-boost", parts ? String(parts.mb) : "");
-          };
-
-          const paintMenu = () => {
-            while (popup.children.length) popup.children[0].remove();
-            const state = typeof api()?.state === "function" ? api().state() : {};
-            const gameMode = typeof api()?.gameModeState === "function" ? api().gameModeState() : null;
-            const snapshot = gameMode?.snapshot || state.snapshot || null;
-            const items = boostMenuItems({
-              running: boostRunning,
-              canDeep: state.policy !== false,
-              canGameMode: typeof api()?.setGameMode === "function",
-              gameMode,
-              snapshot,
-              undoSize: Number(state.undoSize) || 0,
-              // OW-115: the module owns the last run's grouped reasons and the live loaded-tab counts.
-              skipped: state.lastSkipped,
-              loadedTabs: state.loadedTabs,
-              language: getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE),
-              notesRaw: getString(NOTES_LANGUAGE_PREF, "en"),
-            });
-            // OW-121: the old disabled explanation row and "more actions" note are folded into tooltips. Nothing
-            // is appended below the four buttons, so the open popup stays exactly one compact row high.
-            const skippedInfo = items.find((item) => item.id === "deep-skipped");
-            for (const item of items) {
-              if (item.id === "deep-skipped") continue;
-              const row = doc.createElement("button");
-              row.type = "button";
-              row.className = "zw-boost-menu-item";
-              row.setAttribute("role", item.checked !== undefined ? "switch" : "button");
-              row.setAttribute("data-zw-boost-action", item.id);
-              if (item.level) row.setAttribute("data-zw-boost-level", item.level);
-              row.textContent = item.shortLabel || item.label;
-              row.setAttribute("aria-label", item.label);
-              const hints = [item.description, item.hint];
-              if (item.id === "free-deep" && skippedInfo) hints.push(skippedInfo.label, skippedInfo.hint);
-              const title = hints.filter(Boolean).join(" \u00b7 ");
-              if (title) row.setAttribute("title", title);
-              if (item.id === "game-mode" && item.available) {
-                const baseTitle = title;
-                const showPreview = () => {
-                  const line = previewGameModeHint();
-                  if (!line) return;
-                  row.setAttribute("data-zw-boost-preview", line);
-                  row.setAttribute("aria-description", line);
-                  row.setAttribute("title", [baseTitle, line].filter(Boolean).join(" \u00b7 "));
-                };
-                row.addEventListener("mouseenter", showPreview);
-                row.addEventListener("focus", showPreview);
-              }
-              row.disabled = !item.available;
-              row.setAttribute("aria-disabled", item.available ? "false" : "true");
-              // A switch, not an action: the state is on the row so a screen reader and a test can both read it.
-              if (item.checked !== undefined) row.setAttribute("aria-checked", item.checked ? "true" : "false");
-              if (item.available) {
-                row.addEventListener("click", (event) => {
-                  event?.preventDefault?.();
-                  event?.stopPropagation?.();
-                  closePopup();
-                  void runAction(item.id);
-                });
-              }
-              popup.appendChild(row);
-            }
-          };
-
-          const api = () => boostModule();
-          const languageOptions = () => ({
-            language: getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE),
-            notesRaw: getString(NOTES_LANGUAGE_PREF, "en"),
-          });
-          // G7: read the G2 dry run on hover/focus and immediately before ON. No cached reading, no polling.
-          function previewGameModeHint() {
-            const boost = api();
-            if (!boost || typeof boost.previewGameMode !== "function" || boost.gameModeState?.()?.on) return "";
-            let preview = null;
-            try { preview = boost.previewGameMode(); } catch (_) { preview = null; }
-            return typeof boost.widgetPreviewText === "function"
-              ? boost.widgetPreviewText(preview, widgetLang())
-              : boostGameModePreviewText(preview, languageOptions());
-          }
-          let gameModeUnsubscribe = null;
-          let gameModeEventHandled = false;
-          let boostSampling = false;
-          const stopCardSampling = () => {
-            if (!boostSampling) return;
-            boostSampling = false;
-            try {
-              api()?.stopSampling?.();
-            } catch (_) {}
-          };
-          const startCardSampling = () => {
-            if (boostSampling) return;
-            const boost = api();
-            if (!boost || typeof boost.startSampling !== "function") return;
-            boostSampling = true;
-            try {
-              boost.startSampling();
-            } catch (_) {
-              boostSampling = false;
-            }
-          };
-
-          const isPopupOpen = () => !popup.hidden;
-          const closePopup = () => {
-            if (popup.hidden) return false;
-            popup.hidden = true;
-            menuBtn.setAttribute("aria-expanded", "false");
-            stopCardSampling();
-            return true;
-          };
-          const openPopup = () => {
-            ensureSubscribed();
-            paintValue();
-            paintMenu();
-            popup.hidden = false;
-            menuBtn.setAttribute("aria-expanded", "true");
-            startCardSampling();
-          };
-
-          function runAction(id) {
-            if (id === "free-light") return runLight();
-            if (id === "free-deep") return runDeep();
-            if (id === "restore") return runRestore();
-            if (id === "game-mode") return runGameMode();
-            return Promise.resolve(null);
-          }
-
-          // OW-94: Game Mode is a toggle with its own toast. It is written through the module's own pref, so Settings
-          // and the card never disagree, and the card repaints from the module's state rather than from a local flag.
-          function runGameMode() {
-            const boost = api();
-            if (!boost || typeof boost.setGameMode !== "function") return Promise.resolve(null);
-            const next = !Boolean(boost.gameModeState?.().on);
-            if (next) previewGameModeHint();
-            gameModeEventHandled = false;
-            let result = null;
-            try {
-              result = boost.setGameMode(next);
-            } catch (_) {
-              result = null;
-            }
-            paintMenu();
-            // G7: the real module emits ON/OFF through onGameModeEvent. Keep the older toast for a module
-            // that has no event door, but never let it overwrite the richer G8 feedback.
-            if (!gameModeEventHandled) {
-              const t = (key) => widgetText(resolveWidgetLanguage(getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE), getString(NOTES_LANGUAGE_PREF, "en")), key);
-              showWidgetToast(t(next ? "boost.gameModeOn" : "boost.gameModeOff"));
-            }
-            return Promise.resolve(result);
-          }
-
-          // OW-91: one deep pass, with the same "one at a time" rule as the light one. The result carries how many tabs
-          // and panels went to sleep, and the card says so instead of only a number.
-          async function runDeep() {
-            const boost = api();
-            if (!boost || typeof boost.runLevel2 !== "function") return null;
-            if (boostRunning) return null;
-            boostRunning = true;
-            paintMenu();
-            showWidgetToast(tw("boost.busy"));
-            let result = null;
-            try {
-              result = await boost.runLevel2();
-            } catch (_) {
-              result = null;
-            } finally {
-              boostRunning = false;
-              paintMenu();
-            }
-            showWidgetToast(boostResultText(result, {
-              language: getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE),
-              notesRaw: getString(NOTES_LANGUAGE_PREF, "en"),
-            }));
-            return result;
-          }
-
-          // Restore wakes what the last deep pass put to sleep; the toast reports the count the module restored.
-          function runRestore() {
-            const boost = api();
-            const restoreDoor = typeof boost?.restoreSession === "function"
-              ? () => boost.restoreSession()
-              : typeof boost?.restore === "function" ? () => boost.restore() : null;
-            if (!restoreDoor) return Promise.resolve(null);
-            let restored = null;
-            try {
-              restored = restoreDoor();
-            } catch (_) {
-              restored = null;
-            }
-            paintMenu();
-            const lang = { language: getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE), notesRaw: getString(NOTES_LANGUAGE_PREF, "en") };
-            const code = resolveWidgetLanguage(lang.language, lang.notesRaw);
-            if (restored && restored.panels) {
-              showWidgetToast(widgetText(code, "boost.restored", { count: restored.panels }));
-            } else if (restored && restored.tabs) {
-              showWidgetToast(widgetText(code, "boost.restoredTabs", { count: restored.tabs }));
-            }
-            return Promise.resolve(restored);
-          }
-
-          // One click, one pass. While the module works the card says so and refuses a second start, so a person
-          // cannot stack GC runs by clicking twice.
-          async function runLight() {
-            const boost = api();
-            if (!boost) return null;
-            const decision = resolveBoostClick({ available: true, running: boostRunning });
-            if (decision.action !== "free") return null;
-            boostRunning = true;
-            paintMenu();
-            showWidgetToast(tw("boost.busy"));
-            let result = null;
-            try {
-              result = await boost.runLevel1();
-            } catch (_) {
-              result = null;
-            } finally {
-              boostRunning = false;
-              paintMenu();
-            }
-            showWidgetToast(boostResultText(result, {
-              language: getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE),
-              notesRaw: getString(NOTES_LANGUAGE_PREF, "en"),
-            }));
-            return result;
-          }
-
-          // The module says when its reading changed; the card only repaints, it never asks.
-          const subscribe = () => {
-            if (boostUnsubscribe) return;
-            const boost = api();
-            if (!boost || typeof boost.onChange !== "function") return;
-            try {
-              boostUnsubscribe = boost.onChange((value) => {
-                boostLastMB = typeof value === "number" ? value : (typeof boost.lastMB === "function" ? boost.lastMB() : null);
-                paintValue();
-              });
-              if (boostLastMB == null && typeof boost.lastMB === "function") {
-                boostLastMB = boost.lastMB();
-              }
-            } catch (_) {
-              boostUnsubscribe = null;
-            }
-          };
-          // OW-92: the limiter acts on its own, so the card is where it says so — a soft notice, a finished hard run,
-          // or the once-per-ten-minutes "nothing left to do". Same toast as a click's result, because it is the same
-          // kind of sentence.
-          let limiterUnsubscribe = null;
-          const subscribeLimiter = () => {
-            if (limiterUnsubscribe) return;
-            const boost = api();
-            if (!boost || typeof boost.onLimiterEvent !== "function") return;
-            try {
-              limiterUnsubscribe = boost.onLimiterEvent((event) => {
-                const lang = { language: getString(WIDGET_PREFS.LANGUAGE, DEFAULTS.LANGUAGE), notesRaw: getString(NOTES_LANGUAGE_PREF, "en") };
-                const code = resolveWidgetLanguage(lang.language, lang.notesRaw);
-                if (event?.action === "notify") {
-                  showWidgetToast(widgetText(code, "boost.limitHit", { mb: Math.round(Number(event.totalMB) || 0), limit: Math.round(Number(event.limitMB) || 0) }));
-                } else if (event?.action === "hard-done") {
-                  const freed = event.unloaded?.tabs || event.unloaded?.panels;
-                  if (freed) showWidgetToast(widgetText(code, "boost.limitDone", { mb: Math.round(Number(event.totalMB) || 0) }));
-                } else if (event?.action === "nothing-eligible") {
-                  showWidgetToast(widgetText(code, "boost.limitNothing"));
-                }
-              });
-            } catch (_) {
-              limiterUnsubscribe = null;
-            }
-          };
-          // G7: the Boost module owns the ON, settled, 30 s final and OFF reports. The tray subscribes once,
-          // paints from the event state and shows the OFF toast's Restore action without polling gameModeState().
-          const subscribeGameMode = () => {
-            if (gameModeUnsubscribe) return;
-            const boost = api();
-            if (!boost || typeof boost.onGameModeEvent !== "function") return;
-            try {
-              gameModeUnsubscribe = boost.onGameModeEvent((event) => {
-                const action = String(event?.action || "");
-                const opts = languageOptions();
-                const code = resolveWidgetLanguage(opts.language, opts.notesRaw);
-                if (action === "on") {
-                  gameModeEventHandled = true;
-                  showWidgetToast(widgetText(code, "boost.gameStarting"));
-                  return;
-                }
-                if (action === "on-settle" || action === "on-final") {
-                  gameModeEventHandled = true;
-                  const state = event.state || (typeof boost.gameModeState === "function" ? boost.gameModeState() : null);
-                  const line = typeof boost.widgetFeedbackText === "function"
-                    ? boost.widgetFeedbackText(state, widgetLang())
-                    : boostGameModeFeedbackText(state, opts);
-                  showWidgetToast(line);
-                  paintMenu();
-                  return;
-                }
-                if (action === "off") {
-                  gameModeEventHandled = true;
-                  const snapshot = event.state?.snapshot ||
-                    (typeof boost.gameModeState === "function" ? boost.gameModeState()?.snapshot : null) || {};
-                  const line = typeof boost.widgetOffText === "function"
-                    ? boost.widgetOffText(snapshot, widgetLang())
-                    : boostGameModeOffText(snapshot, opts);
-                  const counts = boostGameModeSnapshot(snapshot);
-                  const restoreAction = counts.total
-                    ? { label: widgetText(code, "boost.gameRestoreAction"), run: () => { void runRestore(); } }
-                    : null;
-                  showWidgetToast(line, restoreAction);
-                  paintMenu();
-                  return;
-                }
-                if (action === "restored") paintMenu();
-              });
-            } catch (_) {
-              gameModeUnsubscribe = null;
-            }
-          };
-          const ensureSubscribed = () => {
-            subscribe();
-            subscribeLimiter();
-            subscribeGameMode();
-          };
-          ensureSubscribed();
-          paintValue();
-
-          // A click on the card runs the light pass; a click on the arrow opens the menu. That split keeps the plan's
-          // "left click runs Level 1" true while the arrow still reaches the rest.
-          wrap.addEventListener("click", (event) => {
-            if (popup.contains?.(event?.target)) return;
-            if (event?.target === menuBtn) return;
-            if (event && ((event.button != null && event.button !== 0) || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey)) return;
-            event?.preventDefault?.();
-            void runLight();
-          });
-          menuBtn.addEventListener("click", (event) => {
-            event?.preventDefault?.();
-            event?.stopPropagation?.();
-            if (isPopupOpen()) closePopup();
-            else openPopup();
-          });
-          // A click anywhere else closes the menu, and so does Escape. Both are cleanup-registered AND removed on dispose().
-          const onDocPointer = (event) => {
-            if (!isPopupOpen()) return;
-            if (wrap.contains?.(event?.target)) return;
-            closePopup();
-          };
-          const onKeyDown = (event) => {
-            if (event?.key !== "Escape") return;
-            if (closePopup()) event?.stopPropagation?.();
-          };
-          doc.addEventListener("pointerdown", onDocPointer);
-          doc.addEventListener("keydown", onKeyDown);
-          const teardownCard = () => {
-            closePopup();
-            stopCardSampling();
-            try {
-              doc.removeEventListener("pointerdown", onDocPointer);
-              doc.removeEventListener("keydown", onKeyDown);
-              if (typeof boostUnsubscribe === "function") boostUnsubscribe();
-              if (typeof limiterUnsubscribe === "function") limiterUnsubscribe();
-              if (typeof gameModeUnsubscribe === "function") gameModeUnsubscribe();
-            } catch (_) {}
-            boostUnsubscribe = null;
-            limiterUnsubscribe = null;
-            gameModeUnsubscribe = null;
-          };
-          registerCleanup(teardownCard);
-
-          return {
-            element: wrap,
-            fetch() {
-              ensureSubscribed();
-              return { mb: boostLastMB, available: Boolean(api()) };
-            },
-            render() {
-              // The number is painted by the module's callback; ensure late-registered Boost binds if it appeared later.
-              ensureSubscribed();
-              paintValue();
-            },
-            dispose() {
-              teardownCard();
-            },
-            // The test seam and any other card that wants the action without a pointer.
-            runLight,
-            openMenu: openPopup,
-            closeMenu: closePopup,
-          };
-        },
-      };
-
-      // G10: with a standalone Boost installed, its marker asks the tray to own the one Boost card.
-      // Widgets-first installs already drew this definition; Boost then leaves it alone. Boost-first
-      // installs hand their external definition through takeOver(), so there is never a second card.
-      const boostHandoff = window.__zentralBoostStandaloneWidget;
-      const trayTookBoost = boostHandoff && typeof boostHandoff.takeOver === "function"
-        ? boostHandoff.takeOver({
-            registerWidget,
-            unregisterWidget,
-            widgetText,
-            widgetLang,
-            boostResultText,
-            boostPreviewText: boostGameModePreviewText,
-            boostFeedbackText: boostGameModeFeedbackText,
-            boostOffText: boostGameModeOffText,
-          })
-        : false;
-      if (!trayTookBoost) registerWidget(boostWidgetDefinition);
-
-      // The legacy choice is applied once both cards exist, so the migration can see the Boost definition.
-      adoptLegacyStatusCard();
 
       const onVisibilityOrResize = () => scheduleMeasure();
       const listen = (target, type, fn, opts) => {
@@ -7363,7 +6667,7 @@ function nativeSidebarSide() {
         getArea: () => ({ ...lastArea }),
         getTray: () => tray,
         isPaused: () => scheduler.isPaused(),
-        // OW-94: whether Game Mode is holding this scheduler, for a live check and for the Boost card's own label.
+        // OW-94: whether Game Mode is holding this scheduler, for a live check.
         isHeld: () => scheduler.isHeld(),
         activeTimerCount: () => scheduler.activeTimerCount(),
         remeasure: () => syncWidgetsAndLayout(),

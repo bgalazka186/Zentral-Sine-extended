@@ -37,7 +37,7 @@ test("the Boost README explains both sides of Game Mode, the exemptions, Restore
   assert.match(guide, /\*\*Restore and what is lost\.\*\*/);
   assert.match(guide, /unsaved page state/);
   assert.match(guide, /short\s+reload/);
-  assert.match(guide, /standalone Boost card promised by the owner is G10/);
+  assert.match(guide, /Boost-owned card source ships in this folder and is used by both loaders; the generic Widgets tray never owns\s+or registers a Boost card/);
 });
 
 test("Settings descriptions match G8: one plan-driven pass, no Game Mode dependency on Stronger saver", () => {

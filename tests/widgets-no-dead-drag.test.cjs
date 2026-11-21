@@ -28,7 +28,6 @@ const BASE = {
   "zen.workspace.zentral.widgets.clock.enabled": true,
   "zen.workspace.zentral.widgets.date.enabled": true,
   "zen.workspace.zentral.widgets.weather.enabled": false,
-  "zen.workspace.zentral.widgets.boost.enabled": false,
 };
 
 const fire = (el, type, extra = {}) => {

@@ -20,21 +20,25 @@ reloading anything. Part of the owner's RAM plan (`docs/PLAN_CODING_AGENT.md`, t
   is a single one-shot timer that a new input cancels and re-arms; the final run waits for `requestIdleCallback` with a
   timeout. A hard ceiling runs it once anyway if the session never goes quiet (a first-run session with lots of input).
 
-## The widget (OW-90, OW-121)
+## The widget (OW-90, OW-121, W2–W6)
 
-There is **one Boost card** in every installation. In the full pack the sidebar Widgets tray draws it (OW-90): the
-RAM number and the action that lowers it, in one place, reading the module's own `memoryMB` / `onChange` result.
-Since G10, a standalone Boost install draws its own card from `standalone/ZentralBoostWidget.js` and
-`ZentralBoostWidget.css`; it calls `runLevel1()`, `runLevel2()`, `setGameMode()` and `restoreSession()` through the
-same compact level group. If the standalone Widgets tray is also installed, Boost publishes
-`window.__zentralBoostStandaloneWidget`; the tray calls `takeOver()` and owns the card, so no second DOM card is
-created in either load order. Since G7, both card owners read `previewGameMode()` before ON, subscribe to the
-module's Game Mode event door, show the final freed/unloaded/kept report, offer Restore from the OFF toast and label
-Restore with the live snapshot counts. A missing module still leaves a dash, never an error.
+There is **one Boost-owned widget implementation** in every installation. The full pack and standalone Boost package
+load the same `ZentralBoostWidget.js` and `ZentralBoostWidget.css` from this folder. The card reads Boost's own
+`memoryMB()` / `onChange()` result and exposes Light, Deep, Game Mode and Restore; it does not register with or probe
+the generic Widgets tray. Widgets likewise has no Boost code or callback, so the two features can be installed,
+disabled and reloaded independently.
+
+When Zen exposes a safe sidebar mount point, `#zentral-boost-widget` is a real in-flow tile in the sidebar flex
+column. If the generic `#zentral-sidebar-widgets` tray is present, the stable order is **tray → Boost tile → media /
+bottom chrome**. The tile is seated with the shared safe selector in `loader/ZentralSidebarMount.js`, preserving the
+video player's anchor adjacency; the Widgets free-area measurement counts its visible in-flow height like other
+sidebar chrome. No overlay is used in this main mode. If no safe target exists, Boost retains the hover-card plus
+small anchor fallback. Hidden and compact-hidden sidebar states are CSS-controlled; turning the sidebar back on
+reveals the same tile without a polling loop.
 
 The OW-121 level group is one horizontal row, capped at 26 px high: **Light**, **Deep**, **Game** and **Restore**.
-It is not a drop-down list and adds no height to the widget. Each card carries a deterministic one-line description
-in its tooltip, in both widget languages:
+It is not a drop-down list and adds no height to the widget. Each action keeps its deterministic one-line tooltip in
+English and Polish:
 
 - **Light** — GC/CC + memory minimize. No tabs touched.
 - **Deep** — Light clean first, then eligible tabs sleep. Restore available.
@@ -43,16 +47,17 @@ in its tooltip, in both widget languages:
 
 OW-115's grouped skip reasons and pinned/unpinned loaded-tab counts are folded into the Deep tooltip. The existing
 post-run toast adds a short ` · skipped N protected tab(s)` suffix when a run reports grouped skips; no result row
-was added under the card. The full-pack card's switch is `zen.workspace.zentral.widgets.boost.enabled` (default on);
-the standalone card's switch is `zen.workspace.zentral.boost.widget_enabled` (default on). Both UIs keep OW-121's
-one-row, 26 px level group; the standalone stylesheet is declared through `css` in `standalone.json`.
+was added under the card. `zen.workspace.zentral.boost.widget_enabled` is the single full-pack and standalone widget
+switch (default `true`) and is shown in Boost's Memory settings. When it is false, Boost leaves no tile or mount
+observer. G7's preview, final report, OFF toast and live Restore counts come from the same card source in both
+installations. The Boost-owned stylesheet is declared through `css` in `standalone.json` and the full-pack catalog.
 
 ## Preferences
 
 | Pref | Default | Meaning |
 | :--- | :------ | :------ |
-| `zen.workspace.zentral.boost.enabled` | `true` | Master Boost switch; the standalone card also reads it before drawing. |
-| `zen.workspace.zentral.boost.widget_enabled` | `true` | Standalone card kill switch (G10). The Widgets tray still owns the single card when installed. |
+| `zen.workspace.zentral.boost.enabled` | `true` | Master Boost feature/API switch. |
+| `zen.workspace.zentral.boost.widget_enabled` | `true` | Show the one Boost-owned sidebar widget in the full pack or standalone install. |
 | `zen.workspace.zentral.boost.startup_trim` | `true` | The single post-startup trim runs. Off = only explicit "free memory" actions. |
 | `zen.workspace.zentral.boost.unload_pinned` | `false` | A deep pass may include pinned and Essential tabs. Renamed from `keep_pinned` in 3.4.0 (the old name said the opposite); an existing `true` is migrated once and read as a fallback for one release. |
 | `zen.workspace.zentral.boost.shortcut` | `""` | Keyboard shortcut for the light pass, e.g. `Accel+Shift+B`; empty installs nothing. |
@@ -69,6 +74,13 @@ one-row, 26 px level group; the standalone stylesheet is declared through `css` 
 | `zen.workspace.zentral.boost.game_restore_recent_n` | `8` | How many newest-`lastAccessed` tabs the `recent` profile restores. |
 | `zen.workspace.zentral.boost.game_restore_stagger_ms` | `700` | One restore item per one-shot timer; at most two loading at once. |
 | `zen.workspace.zentral.boost.game_restore_on_exit` | `"ask"` | Kill-switch: `ask` waits for the Restore action, `always` restores on Game Mode off, `never` leaves it manual. |
+
+### One-time widget-toggle migration (W5)
+
+The retired Widgets toggle `zen.workspace.zentral.widgets.boost.enabled` is read only to migrate an existing saved
+choice. If it has a user value and `zen.workspace.zentral.boost.widget_enabled` does not, Boost copies that value
+once. If the new pref already has a user value, it wins (including an explicit `false`). With neither user value,
+the widget defaults to `true`. The old pref is never cleared, rewritten or shown as a Widgets setting.
 
 All of them are read live, so switching them needs no restart, and (G11) **every one is rendered in the Zentral main
 settings window** under Memory Boost · Memory / Limiter / Game Mode. `node tools/check-settings-consistency.cjs`
@@ -189,14 +201,14 @@ freed value.
 
 The card does not guess what Game Mode did. Hovering or focusing **Game** reads the G2 dry run on demand and says
 how many tabs and apps will sleep before the switch is thrown. Boost emits one `onGameModeEvent()` report for ON, the
-3 s settled reading, the 30 s late-Gecko final reading and OFF; both the full-pack Widgets card and the standalone
-Boost card subscribe once and release that subscription with the card. The final toast is
+3 s settled reading, the 30 s late-Gecko final reading and OFF; the same Boost-owned card source subscribes once in
+either the full pack or standalone package and releases that subscription with the card. The final toast is
 `Game Mode: freed X MB · N tabs, M apps unloaded · kept: <name (reason)>, …`, with at most three named kept items
 followed by `+K more`. OFF says `Game Mode off` with the snapshot counts and a **Restore** action. The Restore button
 reads `Restore (M apps, N tabs)` while a G3/G5 snapshot exists, otherwise stays disabled with the existing
-`Nothing to restore yet` text. English and Polish come from the same Boost-owned dictionary; the tray keeps pure
-fallback helpers so a Widgets-only install can still draw the words. There is no polling, no new preference and no
-second RAM measurement path.
+`Nothing to restore yet` text. English and Polish come from the same Boost-owned dictionary. A Widgets-only install
+does not load the card or any Boost strings. There is no polling, no new preference and no second RAM measurement
+path.
 
 ## Game Mode guide, exemptions and kill switches (G9)
 
@@ -226,9 +238,9 @@ reason `selected`; otherwise it is parked and unloaded through G4's deferred doo
 `game_park_selected` (on) is the selected-tab parking kill switch; `game_restore_tabs` (`all`), `game_restore_recent_n`
 (8), `game_restore_stagger_ms` (700) and `game_restore_on_exit` (`ask`) own Restore. `game_restore_on_exit=never`
 disables automatic Restore on exit; `game_restore_tabs=none` restores only the selection hand-back. `startup_trim`,
-`limit_enabled` and `unload_pinned` keep their existing defaults. G10 added `boost.widget_enabled` for the standalone
-Boost card; the full-pack tray does not borrow it. Every generated root and standalone `preferences.json` field has a
-placed settings row through the G11 catalog checker (608 fields after G10).
+`limit_enabled` and `unload_pinned` keep their existing defaults. `boost.widget_enabled` is the shared card's
+full-pack/standalone visibility switch and has a placed row in Boost's Memory category. Every generated root and
+standalone `preferences.json` field has a placed settings row through the G11 catalog checker.
 
 **Restore and what is lost.** Restore rebuilds exactly the holders that existed before the sleep, and nothing else
 (R1/R2):
@@ -254,8 +266,8 @@ A user click or tile action removes that item from the queue.
 Unloaded tabs lose **unsaved page state** (form text, in-page drafts and transient client state); they need a short
 reload when selected or restored. Session URLs, labels, order and pinned state are remembered in memory only, capped at
 500 entries and cleared on Restore/destroy. Explicit Restore and direct user clicks keep working while Game Mode is on.
-The standalone Boost card promised by the owner is G10; it now ships in this folder, and the full-pack Widgets tray
-owns the card when installed so no duplicate is created.
+The Boost-owned card source ships in this folder and is used by both loaders; the generic Widgets tray never owns
+or registers a Boost card.
 
 ## Selected-tab parking (G4)
 
@@ -352,24 +364,28 @@ only), which the Deep card tooltip and the short post-run result line use to exp
   handler calls it too.
 - A build without `ChromeUtils.requestProcInfo()` logs **one** warning and keeps the "free memory" half working; nothing
   errors in the window.
-- Themes: the full-pack widget (OW-90) draws with the tray's own variables; the standalone card owns
-  `ZentralBoostWidget.css`, declared by `standalone.json`. No permanent document observer or polling is used.
-- If the widget tray is disabled or absent the module still works through its own G10 card, the API and the shortcut
-  (OW-91). With the tray present, the tray is the sole card owner.
+- Themes: the full-pack and standalone loaders use the same Boost-owned `ZentralBoostWidget.css`, declared by
+  `standalone.json` and the full-pack catalog. The normal card remains in sidebar flow; only the no-target fallback
+  uses a small anchor for its hover card. No permanent document observer or polling is used.
+- Disabling the generic Widgets tray does not disable or own the Boost card. `widget_enabled` controls Boost's own
+  tile; the Boost API and shortcut remain available independently.
 
 ## Full pack and standalone
 
-In the full pack the runtime owns this file: it is registered as the feature `boost`, reads the preferences above,
-and is started after the runtime's native-ready barrier. The standalone build runs the same source on its own.
+In the full pack the runtime owns the Boost feature and API. The catalog loads `additional/boost/ZentralBoostWidget.js`
+for its card. Standalone Boost runs the same source through its embedded loader and the same `widget_enabled` pref.
 
-**G10 is done; G7 completes its feedback.** Installing only `additional/boost/` gives one visible Boost card with an
-on-demand RAM number, Light / Deep / Game / Restore, English/Polish strings, a `previewGameMode()` hint, the G8 final
-report, a Restore-labelled OFF toast and a working `restoreSession()`.
-The standalone package has no Essential panel host, so Deep and Game Mode there unload ordinary tabs only; the panel
-record half of Game Mode needs the full pack. With the standalone Widgets tray also installed, the marker hand-off
-makes the tray the sole owner: Boost removes its self-contained card and registers one `boost` definition, or leaves
-the tray's built-in card in place if Widgets loaded first. The full pack short-circuits the standalone bundle, so it
-never draws a second card. Live install/uninstall and visual parity remain owner gate 6.
+Installing only `additional/boost/` gives one visible card with the on-demand RAM value, Light / Deep / Game / Restore,
+English/Polish text, the `previewGameMode()` hint, the G8 final report and the Restore-labelled OFF toast. The
+standalone package has no Essential-panel host, so Deep and Game Mode there unload ordinary tabs only; the panel-record
+part of Game Mode needs the full pack. Installing the standalone Widgets package too does not change Boost ownership:
+the generic tray and the Boost tile coexist in either load order without calling one another. A Widgets-only install
+has no Boost element or strings. When the complete full pack is installed, its runtime remains the feature owner and
+standalone copies stay inactive.
+
+**Live checks remain open.** The automated coexistence suite is not a substitute for the five owner checks in
+`TODO_handoff.md`; attach the requested Zen/Sine screenshots before marking visual placement, Settings migration,
+button feedback or standalone behavior complete.
 
 ## Where this stops
 
@@ -381,7 +397,13 @@ one-shot `setTimeout` chain, and Game Mode is the one switch that stops every ot
 
 `https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/boost`
 
-Enable `sine.allow-unsafe-js` and restart Zen after the first install. `ZentralBoost.standalone.uc.js`,
-`theme.json`, `preferences.json` and `standalone.lock.json` are **generated** by `node tools/build-standalone.cjs`
-from `ZentralBoost.uc.js`, `standalone/ZentralBoostWidget.js`, `ZentralBoostWidget.css` and `standalone.json`; edit
-the sources and rebuild, never the generated files. Keep version 3.4.1 with `--keep-version` on this branch.
+Enable `sine.allow-unsafe-js` and restart Zen after the first install. Installing this folder alone is sufficient
+for the Boost card; the separate Widgets package is optional. If both are installed, they coexist without a runtime
+registration or hand-off. Use `zen.workspace.zentral.boost.widget_enabled` in Boost's Memory settings to show or hide
+the tile. An existing saved `zen.workspace.zentral.widgets.boost.enabled` value is migrated once as described above;
+the old user pref is retained.
+
+`ZentralBoost.standalone.uc.js`, `theme.json`, `preferences.json` and `standalone.lock.json` are **generated** by
+`node tools/build-standalone.cjs` from `ZentralBoost.uc.js`, `ZentralBoostWidget.js`, `ZentralBoostWidget.css` and
+`standalone.json`; edit the sources and rebuild, never the generated files. Keep version 3.4.1 with `--keep-version`
+on this branch.

@@ -259,18 +259,6 @@
     ]
   },
   {
-    "type": "text",
-    "label": "**Boost**",
-    "size": "16px"
-  },
-  {
-    "property": "zen.workspace.zentral.widgets.boost.enabled",
-    "label": "Show the Boost widget (memory and compact levels)",
-    "description": "Boost replaces the old Status card: browser RAM plus compact Light, Deep, Game Mode and Restore cards; no extra widget height.",
-    "type": "checkbox",
-    "defaultValue": true
-  },
-  {
     "property": "zen.workspace.zentral.widgets.language",
     "label": "Language of the widgets",
     "description": "Follow the Notes language until you choose otherwise; a choice made here is kept.",

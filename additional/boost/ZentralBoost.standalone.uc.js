@@ -1155,7 +1155,997 @@ const __BUNDLE_URL__ = Components.stack.filename; // install folder, resolved sy
  */
 const __zentralEmbeddedLoader = (function () {
   const sources = {
+"additional/boost/ZentralBoostWidget.js": function (window) {
+/* Boost-owned card implementation. This source is loaded by both the full-pack
+ * feature loader and the standalone Boost loader. It contains no Widgets API,
+ * tray registration or second card implementation. The loader supplies a small
+ * adapter for the document/window, sidebar geometry, host-unload hook, timers
+ * and listeners; Boost supplies its existing public API and pref gate.
+ *
+ * Every DOM node, listener, observer, one-shot timer, onChange subscription and
+ * startSampling() call is released by the returned cleanup. There is no
+ * setInterval or permanent polling.
+ */
+(function installBoostWidgetModule(targetWindow) {
+  "use strict";
 
+  function mountBoostWidget(options = {}) {
+    const window = options.window || targetWindow;
+    const doc = options.document || window.document;
+    if (!doc?.documentElement || doc.documentElement.nodeType !== 1 ||
+        typeof doc.createElement !== "function" || typeof doc.documentElement.appendChild !== "function")
+      return () => {};
+    const runtime = options.runtime || window.ZentralRuntime || window.__zentralStandaloneRuntime;
+    const lifecycle = options.lifecycle;
+    const adapter = options.adapter || {};
+    const isEnabled = typeof options.isEnabled === "function" ? options.isEnabled : () => true;
+    const MARKER = "__zentralBoostWidget";
+    const CARD_ID = "zentral-boost-widget";
+    const ANCHOR_ID = "zentral-boost-widget-anchor";
+    const TRAY_ID = "zentral-sidebar-widgets";
+    const TOAST_MS = 4000;
+    const sidebarMount = window.__zentralSidebarMount || null;
+    const chooseBottomMount = adapter.chooseBottomMount || sidebarMount?.chooseBottomMount;
+    const SEAT_ANCHOR_IDS = Array.isArray(sidebarMount?.anchorIds)
+      ? sidebarMount.anchorIds
+      : ["zen-media-controls-toolbar", "zen-sidebar-bottom-buttons", "tabbrowser-tabs", "vertical-tabs"];
+    const VIDEO_PLAYER_ID = sidebarMount?.videoPlayerId || "zentral-video-preview";
+    const markerState = { disposed: false };
+    const cardInstances = new Set();
+    const setTimer = typeof adapter.setTimeout === "function"
+      ? adapter.setTimeout
+      : (fn, ms) => lifecycle.setTimeout(fn, ms);
+    const clearTimer = typeof adapter.clearTimeout === "function"
+      ? adapter.clearTimeout
+      : (id) => lifecycle.clearTimeout(id);
+    const own = typeof adapter.own === "function"
+      ? adapter.own
+      : (fn) => lifecycle.own(fn);
+    const listen = typeof adapter.listen === "function"
+      ? adapter.listen
+      : (target, type, fn, listenerOptions) => lifecycle.listen(target, type, fn, listenerOptions);
+    let disposed = false;
+    let decisionTimer = null;
+    let seatTimer = null;
+    let hostUnregister = null;
+    let ownCardCleanup = null;
+    let flowCleanup = null;
+    let flowTile = null;
+    let flowCard = null;
+    let flowVisibility = null;
+    let mountObserver = null;
+    let mountHost = null;
+    let observedMountHost = null;
+    let flowTrackingStarted = false;
+    const flowTrackingReleases = [];
+    let enabledUnregister = null;
+    let hover = null;
+    let anchor = null;
+    let marker = null;
+
+    const consoleWarn = (...args) => {
+      try { window.console?.warn?.("[Zentral Boost widget]", ...args); } catch (_) {}
+    };
+    const boostApi = () => options.api || window.ZentralBoost || null;
+    const enabled = () => !disposed && isEnabled() === true;
+    const language = () => {
+      const raw = window.navigator?.language || window.navigator?.userLanguage || "en";
+      const api = boostApi();
+      return typeof api?.widgetLanguage === "function"
+        ? api.widgetLanguage(raw)
+        : String(raw).toLowerCase().startsWith("pl") ? "pl" : "en";
+    };
+    const text = (key, params = null) => {
+      const api = boostApi();
+      if (typeof api?.widgetText === "function") return api.widgetText(language(), key, params);
+      if (key === "card.title") return "Memory Boost";
+      if (key === "card.unknown") return "RAM unknown";
+      return String(key);
+    };
+    const number = (value, fallback = 0) => {
+      const n = Number(value);
+      return Number.isFinite(n) && n >= 0 ? Math.round(n) : fallback;
+    };
+    const valueParts = (value) => {
+      const n = Number(value);
+      if (!Number.isFinite(n) || n <= 0) return null;
+      return {
+        mb: Math.round(n),
+        text: n >= 1000 ? (Math.round(n / 100) / 10).toFixed(1) + " GB" : Math.round(n) + " MB",
+        level: n >= 4096 ? "low" : "ok",
+      };
+    };
+    const normalizeSnapshot = (snapshot) => {
+      const s = snapshot && typeof snapshot === "object" ? snapshot : {};
+      const tabs = number(s.tabs ?? s.restorableTabs, 0);
+      return { ...s, panels: number(s.panels, 0), tabs, restorableTabs: number(s.restorableTabs ?? s.tabs, 0) };
+    };
+    const snapshotOf = (api = boostApi()) => {
+      let game = null;
+      let session = null;
+      try { game = typeof api?.gameModeState === "function" ? api.gameModeState() : null; } catch (_) {}
+      try { session = typeof api?.sessionState === "function" ? api.sessionState() : null; } catch (_) {}
+      return normalizeSnapshot(game?.snapshot || session || {});
+    };
+    const restorableCount = (snapshot) => number(snapshot?.panels, 0) + number(snapshot?.tabs, 0);
+function fallbackFeedbackText(state) {
+  const src = state && typeof state === "object" ? state : {};
+  const unloaded = src.unloaded && typeof src.unloaded === "object" ? src.unloaded : {};
+  const kept = Array.isArray(src.kept) ? src.kept : [];
+  const names = kept.slice(0, 3).map((entry) => {
+    const row = entry && typeof entry === "object" ? entry : { id: entry };
+    return String(row.id || row.kind || "tab") + " (" + String(row.reason || "kept") + ")";
+  });
+  if (kept.length > 3) names.push(text("feedback.keptMore", { count: kept.length - 3 }));
+  return text("feedback.gameOn", {
+    mb: number(src.freedMB ?? src.finalFreedMB, 0),
+    tabs: number(unloaded.tabs, 0),
+    panels: number(unloaded.panels, 0),
+    kept: names.length ? names.join(", ") : text("feedback.keptNone"),
+  });
+}
+function fallbackOffText(snapshot) {
+  const line = text("feedback.gameOff");
+  const label = restorableCount(snapshot)
+    ? text("card.restoreLabel", { panels: number(snapshot.panels, 0), tabs: number(snapshot.tabs, 0) })
+    : text("card.nothingRestore");
+  return restorableCount(snapshot) ? line + " \u00b7 " + label : line;
+}
+
+function fallbackMenu(api, snapshot, previewLine = "") {
+  const lang = language();
+  const t = (key, params) => text(key, params);
+  const gameOn = Boolean(api?.gameModeState?.()?.on);
+  const count = restorableCount(snapshot);
+  return [
+    { id: "free-light", level: "light", shortLabel: t("card.light"), label: t("card.light"), hint: t("card.lightHint"), available: true },
+    { id: "free-deep", level: "deep", shortLabel: t("card.deep"), label: t("card.deep"), hint: t("card.deepHint"), available: Boolean(api?.runLevel2) },
+    { id: "game-mode", level: "game", shortLabel: t("card.game"), label: t("card.game"), hint: previewLine || t(gameOn ? "card.gameHintOn" : "card.gameHint"), available: Boolean(api?.setGameMode), checked: gameOn },
+    { id: "restore", level: "restore", shortLabel: t("card.restore"), label: count ? api?.widgetRestoreLabel?.(snapshot, lang) || t("card.restoreLabel", { panels: number(snapshot.panels, 0), tabs: number(snapshot.tabs ?? snapshot.restorableTabs, 0) }) : t("card.nothingRestore"), hint: count ? t("card.restoreHint") : t("card.nothingRestore"), available: count > 0 && Boolean(api?.restoreSession || api?.restore) },
+  ];
+}
+
+function menuItems(api, snapshot, previewLine = "", actionRunning = false) {
+  const lang = language();
+  const state = typeof api?.state === "function" ? api.state() : {};
+  const game = typeof api?.gameModeState === "function" ? api.gameModeState() : { on: false };
+  const options = {
+    previewHint: previewLine,
+    running: Boolean(state.level2Busy || actionRunning),
+    canDeep: state.policy !== false,
+    canGameMode: typeof api?.setGameMode === "function",
+    canRestore: typeof api?.restoreSession === "function" || typeof api?.restore === "function",
+    gameMode: game,
+    snapshot,
+    language: lang,
+    undoSize: number(state.undoSize, 0),
+    skipped: state.lastSkipped,
+    loadedTabs: state.loadedTabs,
+    restoreLabel: typeof api?.widgetRestoreLabel === "function" ? api.widgetRestoreLabel(snapshot, lang) : "",
+  };
+  const items = typeof api?.widgetMenu === "function" ? api.widgetMenu(options) : fallbackMenu(api, snapshot, previewLine);
+  return Array.isArray(items) ? items : fallbackMenu(api, snapshot, previewLine);
+}
+
+function createCard({ root, mode }) {
+  const lang = language();
+  const cardReleases = [];
+  const actionReleases = [];
+  let actionToastRelease = null;
+  let toastTimer = null;
+  let running = false;
+  let subscribed = false;
+  let sampling = false;
+  let samplingApi = null;
+  let unsubChange = null;
+  let unsubLimiterEvents = null;
+  let unsubGameModeEvents = null;
+  let gameModeEventCount = 0;
+  let cardDisposed = false;
+
+  const ownListen = (target, type, fn, options, bucket = cardReleases) => {
+    if (!target || typeof target.addEventListener !== "function") return () => {};
+    const release = listen(target, type, fn, options);
+    bucket.push(release);
+    return release;
+  };
+  const clearActions = () => {
+    for (const release of actionReleases.splice(0).reverse()) {
+      try { release(); } catch (_) {}
+    }
+    while (root.querySelector?.("[data-zbw-action]")) {
+      const node = root.querySelector("[data-zbw-action]");
+      node.remove();
+    }
+    const popup = root.querySelector?.(".zbw-popup");
+    if (popup) while (popup.children?.length) popup.children[0].remove();
+  };
+  const clearToast = () => {
+    if (toastTimer !== null) {
+      clearTimer(toastTimer);
+      toastTimer = null;
+    }
+    if (actionToastRelease) {
+      try { actionToastRelease(); } catch (_) {}
+      actionToastRelease = null;
+    }
+    const toast = root.querySelector?.(".zbw-toast");
+    if (toast) {
+      while (toast.children?.length) toast.children[0].remove();
+      toast.textContent = "";
+      toast.hidden = true;
+    }
+  };
+
+  root.id = CARD_ID;
+  root.setAttribute("class", "zbw-card " + (mode === "flow" ? "zbw-flow" : "zbw-fallback zentral-boost-widget-fallback"));
+  root.setAttribute("data-zbw-mount", mode === "flow" ? "flow" : "fallback");
+  root.setAttribute("role", "group");
+  root.setAttribute("aria-label", text("card.title"));
+  const row = doc.createElement("div");
+  row.className = "zbw-row";
+  const valueEl = doc.createElement("span");
+  valueEl.className = "zbw-value";
+  valueEl.textContent = "\u2014";
+  const labelEl = doc.createElement("span");
+  labelEl.className = "zbw-label";
+  labelEl.textContent = text("card.title");
+  const popup = doc.createElement("div");
+  popup.className = "zbw-popup";
+  popup.setAttribute("role", "group");
+  popup.setAttribute("aria-label", "Boost levels and Restore");
+  popup.hidden = false;
+  row.appendChild(valueEl);
+  row.appendChild(labelEl);
+  row.appendChild(popup);
+  root.appendChild(row);
+  const toastEl = doc.createElement("div");
+  toastEl.className = "zbw-toast";
+  toastEl.setAttribute("role", "status");
+  toastEl.hidden = true;
+  root.appendChild(toastEl);
+
+  function paintValue() {
+    const api = boostApi();
+    let mb = null;
+    try { mb = typeof api?.lastMB === "function" ? api.lastMB() : null; } catch (_) {}
+    if (!Number.isFinite(Number(mb)) || Number(mb) <= 0) {
+      try { mb = typeof api?.memoryMB === "function" ? api.memoryMB() : null; } catch (_) {}
+    }
+    const parts = valueParts(mb);
+    valueEl.textContent = parts ? parts.text : "\u2014";
+    valueEl.setAttribute("data-zbw-level", parts ? parts.level : "muted");
+    root.setAttribute("data-zbw-value", parts ? String(parts.mb) : "");
+    root.setAttribute("aria-label", parts
+      ? parts.text + " \u00b7 " + text("card.title")
+      : text("card.unknown"));
+  }
+
+  function computePreviewLine() {
+    const api = boostApi();
+    if (!api || typeof api.previewGameMode !== "function" || api.gameModeState?.()?.on) return "";
+    let preview = null;
+    try { preview = api.previewGameMode(); } catch (_) { preview = null; }
+    return typeof api.widgetPreviewText === "function"
+      ? api.widgetPreviewText(preview, language())
+      : text("card.preview", { tabs: number(preview?.counts?.tabs, 0), panels: number(preview?.counts?.panels, 0) });
+  }
+
+  function previewHint(button = null) {
+    const line = computePreviewLine();
+    if (!line) return "";
+    const target = button || root.querySelector?.('[data-zbw-action="game-mode"]');
+    if (!target) return line;
+    const baseTitle = target.getAttribute("data-zbw-base-title") || target.getAttribute("title") || "";
+    target.setAttribute("data-zbw-preview", line);
+    target.setAttribute("aria-description", line);
+    target.setAttribute("title", [baseTitle, line].filter(Boolean).join(" · "));
+    return line;
+  }
+
+  function clearPreview(button = null) {
+    const target = button || root.querySelector?.('[data-zbw-action="game-mode"]');
+    if (!target) return;
+    const baseTitle = target.getAttribute("data-zbw-base-title") || "";
+    target.setAttribute("title", baseTitle);
+    target.removeAttribute("data-zbw-preview");
+    target.removeAttribute("aria-description");
+  }
+
+  function paintMenu() {
+    clearActions();
+    const api = boostApi();
+    const snapshot = snapshotOf(api);
+    const items = menuItems(api, snapshot, "", running);
+    const skippedInfo = items.find((item) => item.id === "deep-skipped");
+    for (const item of items) {
+      if (item.id === "deep-skipped") continue;
+      const button = doc.createElement("button");
+      button.type = "button";
+      button.className = "zbw-action";
+      button.setAttribute("data-zbw-action", item.id);
+      if (item.level) button.setAttribute("data-zbw-level", item.level);
+      button.textContent = item.shortLabel || item.label || item.id;
+      button.setAttribute("aria-label", item.label || item.shortLabel || item.id);
+      const hints = [item.description, item.hint];
+      if (item.id === "free-deep" && skippedInfo) hints.push(skippedInfo.label, skippedInfo.hint);
+      const title = hints.filter(Boolean).join(" · ");
+      if (title) button.setAttribute("title", title);
+      if (item.id === "game-mode") button.setAttribute("data-zbw-base-title", title);
+      if (item.checked !== undefined) {
+        button.setAttribute("role", "switch");
+        button.setAttribute("aria-checked", item.checked ? "true" : "false");
+      }
+      button.disabled = item.available === false;
+      button.setAttribute("aria-disabled", button.disabled ? "true" : "false");
+      if (item.available !== false) {
+        ownListen(button, "click", (event) => {
+          event?.preventDefault?.();
+          event?.stopPropagation?.();
+          void runAction(item.id);
+        }, undefined, actionReleases);
+        if (item.id === "game-mode") {
+          ownListen(button, "mouseenter", () => previewHint(button), undefined, actionReleases);
+          ownListen(button, "focus", () => previewHint(button), undefined, actionReleases);
+          ownListen(button, "mouseleave", () => clearPreview(button), undefined, actionReleases);
+          ownListen(button, "blur", () => clearPreview(button), undefined, actionReleases);
+        }
+      }
+      popup.appendChild(button);
+    }
+  }
+
+  // G7: one event door from the Boost module. The card never asks for a second measurement; it paints the
+  // dry-run hint, the G8 settled/final report and the OFF Restore toast from the state Boost already owns.
+  function handleGameModeEvent(event) {
+    const api = boostApi();
+    const action = String(event?.action || "");
+    if (action === "on") {
+      gameModeEventCount += 1;
+      showToast(text("feedback.gameStarting"));
+      return;
+    }
+    if (action === "on-settle" || action === "on-final") {
+      const state = event?.state || (typeof api?.gameModeState === "function" ? api.gameModeState() : {});
+      const line = typeof api?.widgetFeedbackText === "function"
+        ? api.widgetFeedbackText(state, language())
+        : fallbackFeedbackText(state);
+      showToast(line);
+      paintMenu();
+      return;
+    }
+    if (action === "off") {
+      gameModeEventCount += 1;
+      const snapshot = normalizeSnapshot(event?.state?.snapshot || snapshotOf(api));
+      const line = typeof api?.widgetOffText === "function"
+        ? api.widgetOffText(snapshot, language())
+        : fallbackOffText(snapshot);
+      const restoreAction = restorableCount(snapshot)
+        ? { label: text("feedback.restoreAction"), run: () => { void runAction("restore"); } }
+        : null;
+      showToast(line, restoreAction);
+      paintMenu();
+      return;
+    }
+    if (action === "restored") paintMenu();
+  }
+
+  function handleLimiterEvent(event) {
+    const action = String(event?.action || "");
+    if (action === "notify") {
+      showToast(text("card.limitHit", {
+        mb: Math.round(Number(event.totalMB) || 0),
+        limit: Math.round(Number(event.limitMB) || 0),
+      }));
+    } else if (action === "hard-done") {
+      const unloaded = event.unloaded || {};
+      if (unloaded.tabs || unloaded.panels)
+        showToast(text("card.limitDone", { mb: Math.round(Number(event.totalMB) || 0) }));
+    } else if (action === "nothing-eligible") {
+      showToast(text("card.limitNothing"));
+    }
+  }
+
+  function subscribeLimiterEvents() {
+    if (cardDisposed || unsubLimiterEvents) return;
+    const api = boostApi();
+    if (!api || typeof api.onLimiterEvent !== "function") return;
+    try {
+      unsubLimiterEvents = api.onLimiterEvent(handleLimiterEvent);
+    } catch (_) {
+      unsubLimiterEvents = null;
+    }
+  }
+  function releaseLimiterEvents() {
+    if (unsubLimiterEvents) {
+      try { unsubLimiterEvents(); } catch (_) {}
+      unsubLimiterEvents = null;
+    }
+  }
+
+  function subscribeGameModeEvents() {
+    if (cardDisposed || unsubGameModeEvents) return;
+    const api = boostApi();
+    if (!api || typeof api.onGameModeEvent !== "function") return;
+    try {
+      unsubGameModeEvents = api.onGameModeEvent(handleGameModeEvent);
+    } catch (_) {
+      unsubGameModeEvents = null;
+    }
+  }
+  function releaseGameModeEvents() {
+    if (unsubGameModeEvents) {
+      try { unsubGameModeEvents(); } catch (_) {}
+      unsubGameModeEvents = null;
+    }
+  }
+
+  function showToast(message, action = null) {
+    clearToast();
+    toastEl.textContent = String(message || "");
+    toastEl.hidden = false;
+    if (action && typeof action.run === "function") {
+      toastEl.textContent = "";
+      const line = doc.createElement("span");
+      line.className = "zbw-toast-line";
+      line.textContent = String(message || "");
+      toastEl.appendChild(line);
+      const button = doc.createElement("button");
+      button.type = "button";
+      button.className = "zbw-toast-action";
+      button.textContent = action.label || text("card.restore");
+      actionToastRelease = ownListen(button, "click", (event) => {
+        event?.preventDefault?.();
+        event?.stopPropagation?.();
+        action.run();
+      });
+      toastEl.appendChild(button);
+    }
+    toastTimer = setTimer(() => {
+      toastTimer = null;
+      clearToast();
+    }, TOAST_MS);
+  }
+
+  async function runCleanAction(api, run) {
+    if (running) return null;
+    running = true;
+    paintMenu();
+    showToast(text("card.busy"));
+    let result = null;
+    try { result = await run(); } catch (_) { result = null; }
+    running = false;
+    paintValue();
+    paintMenu();
+    showToast(typeof api.widgetResultText === "function"
+      ? api.widgetResultText(result, language())
+      : text("card.result", { mb: number(result?.freedMB, 0) }));
+    return result;
+  }
+
+  async function runAction(id) {
+    const api = boostApi();
+    if (!api || (running && id !== "game-mode")) return null;
+    if (id === "free-light" && typeof api.runLevel1 === "function")
+      return runCleanAction(api, () => api.runLevel1());
+    if (id === "free-deep" && typeof api.runLevel2 === "function")
+      return runCleanAction(api, () => api.runLevel2());
+    if (id === "game-mode" && typeof api.setGameMode === "function") {
+      previewHint(root.querySelector?.('[data-zbw-action="game-mode"]'));
+      const next = !Boolean(api.gameModeState?.()?.on);
+      const eventsBefore = gameModeEventCount;
+      let result = null;
+      try { result = api.setGameMode(next); } catch (_) { result = null; }
+      if (gameModeEventCount === eventsBefore)
+        showToast(text(next ? "card.gameOn" : "card.gameOff"));
+      paintMenu();
+      return result;
+    }
+    if (id === "restore") {
+      let result = null;
+      try {
+        result = typeof api.restoreSession === "function" ? api.restoreSession() : api.restore?.();
+      } catch (_) { result = null; }
+      paintMenu();
+      if (result?.panels)
+        showToast(text("card.restored", { count: number(result.panels, 0) }));
+      else if (result?.tabs)
+        showToast(text("card.restoredTabs", { count: number(result.tabs, 0) }));
+      return result;
+    }
+    return null;
+  }
+
+  function start() {
+    if (cardDisposed || (mode === "flow" && (root.hidden || root.isConnected === false || !enabled()))) return;
+    const api = boostApi();
+    if (!api) return;
+    if (!subscribed && typeof api.onChange === "function") {
+      try {
+        unsubChange = api.onChange(() => paintValue());
+        subscribed = true;
+      } catch (_) { unsubChange = null; subscribed = false; }
+    }
+    if (!sampling && typeof api.startSampling === "function") {
+      // Capture the API: the shim disposes the Boost feature before extras cleanup, so a later
+      // window.ZentralBoost lookup would be null and stopSampling() would be missed.
+      try { api.startSampling(); sampling = true; samplingApi = api; } catch (_) { sampling = false; samplingApi = null; }
+    }
+    subscribeLimiterEvents();
+    subscribeGameModeEvents();
+  }
+  function stop() {
+    releaseLimiterEvents();
+    releaseGameModeEvents();
+    const api = samplingApi || boostApi();
+    if (sampling) {
+      try { api?.stopSampling?.(); } catch (_) {}
+      sampling = false;
+      samplingApi = null;
+    }
+    if (unsubChange) {
+      try { unsubChange(); } catch (_) {}
+      unsubChange = null;
+    }
+    subscribed = false;
+  }
+  function refresh() {
+    if (cardDisposed) return;
+    start();
+    paintValue();
+    paintMenu();
+  }
+  function teardown() {
+    if (cardDisposed) return;
+    cardDisposed = true;
+    stop();
+    clearToast();
+    clearActions();
+    for (const release of cardReleases.splice(0).reverse()) {
+      try { release(); } catch (_) {}
+    }
+    cardInstances.delete(instance);
+  }
+  const instance = {
+    element: root,
+    fetch() {
+      refresh();
+      const api = boostApi();
+      return { mb: typeof api?.lastMB === "function" ? api.lastMB() : null, available: Boolean(api) };
+    },
+    render: refresh,
+    refresh,
+    paintValue,
+    paintMenu,
+    runAction,
+    showToast,
+    previewHint,
+    start,
+    stop,
+    dispose: teardown,
+  };
+  cardInstances.add(instance);
+  ownListen(doc, "keydown", (event) => {
+    if (event?.key !== "Escape") return;
+    clearPreview();
+    clearToast();
+  });
+  refresh();
+  return instance;
+}
+
+function destroyOwnCard() {
+  if (ownCardCleanup) {
+    try { ownCardCleanup(); } catch (error) { consoleWarn("card cleanup failed", error); }
+    ownCardCleanup = null;
+  }
+  hover = null;
+  anchor = null;
+}
+
+function createSelfCard() {
+  if (ownCardCleanup || !enabled()) return;
+  if (!doc || typeof doc.createElement !== "function" || typeof doc.documentElement?.append !== "function") return;
+  const createHover = adapter.createSidebarHoverCard || runtime?.createSidebarHoverCard;
+  if (typeof createHover !== "function") return;
+  let card = null;
+  const localAnchor = doc.createElement("button");
+  localAnchor.type = "button";
+  localAnchor.id = ANCHOR_ID;
+  localAnchor.className = "zbw-anchor";
+  localAnchor.setAttribute("aria-label", text("card.title"));
+  localAnchor.textContent = text("card.title");
+  const sidebarRect = () => {
+    try {
+      if (typeof adapter.getSidebarRect === "function") return adapter.getSidebarRect() || {};
+      return runtime?.nativeSidebarRect?.() || {};
+    } catch (_) { return {}; }
+  };
+  const rect = sidebarRect();
+  localAnchor.style.left = Math.max(4, number(rect.left, 4)) + "px";
+  localAnchor.style.top = Math.max(4, number(rect.top, 4)) + "px";
+  doc.documentElement.appendChild(localAnchor);
+
+  const localHover = createHover.call(runtime, {
+    window,
+    document: doc,
+    id: CARD_ID,
+    className: "zentral-boost-widget-fallback",
+    role: "group",
+    ariaLabel: text("card.title"),
+    defaultWidth: 300,
+    defaultHeight: 26,
+    getShowDelay: () => 0,
+    getHideDelay: () => 0,
+    getGap: () => 6,
+    getSide: () => "auto",
+    getBounds: () => {
+      const r = sidebarRect();
+      return { left: number(r.left, 0), right: number(r.right, window.innerWidth || 1200) };
+    },
+    isEnabled: () => enabled(),
+    isValid: (target) => Boolean(target && target.isConnected !== false),
+    setTimer,
+    clearTimer,
+    onCreate(node) {
+      card = createCard({ root: node, mode: "fallback" });
+    },
+    render() {
+      card?.refresh();
+    },
+    onShow() {
+      card?.start();
+    },
+    onHide() {
+      card?.stop();
+    },
+  });
+  const releaseHover = own(() => {
+    try { localHover.destroy(); } catch (_) {}
+  });
+  const releaseAnchor = own(() => {
+    try { localAnchor.remove(); } catch (_) {}
+  });
+  const releaseCard = own(() => {
+    try { card?.dispose(); } catch (_) {}
+    card = null;
+  });
+  ownListenSelf(localAnchor, "mouseenter", () => localHover.show(localAnchor));
+  ownListenSelf(localAnchor, "focus", () => localHover.show(localAnchor));
+  ownListenSelf(window, "resize", () => localHover.position());
+  ownCardCleanup = own(() => {
+    for (const release of [...selfListenerReleases].reverse()) {
+      try { release(); } catch (_) {}
+    }
+    selfListenerReleases.clear();
+    releaseCard();
+    releaseHover();
+    releaseAnchor();
+    hover = null;
+    anchor = null;
+  });
+  hover = localHover;
+  anchor = localAnchor;
+  try {
+    localHover.show(localAnchor);
+  } catch (error) {
+    consoleWarn("fallback card failed", error);
+    destroyOwnCard();
+  }
+}
+
+const selfListenerReleases = new Set();
+function ownListenSelf(target, type, fn, options) {
+  if (!target || typeof target.addEventListener !== "function") return () => {};
+  const release = listen(target, type, fn, options);
+  selfListenerReleases.add(release);
+  return () => {
+    selfListenerReleases.delete(release);
+    try { release(); } catch (_) {}
+  };
+}
+
+function isWindowHidden() {
+  return Boolean(
+    doc?.hidden ||
+      (Number.isFinite(window?.STATE_MINIMIZED) &&
+        window?.windowState === window?.STATE_MINIMIZED),
+  );
+}
+
+function shouldHideFlowCard() {
+  return !enabled() || isWindowHidden();
+}
+
+function safeFlowMountTarget() {
+  if (typeof chooseBottomMount !== "function") return null;
+  let fallbackSidebar = null;
+  try { fallbackSidebar = runtime?.nativeSidebarElement?.() || null; } catch (_) {}
+  let target = null;
+  try { target = chooseBottomMount(doc, window, fallbackSidebar); } catch (_) { target = null; }
+  if (!target?.parent || target.parent.nodeType !== 1) return null;
+  if (target.before && target.before.parentNode !== target.parent) return null;
+
+  const video = doc?.getElementById?.(VIDEO_PLAYER_ID);
+  for (let node = target.parent; node; node = node.parentElement) {
+    if (node === video) return null;
+  }
+  if (target.before && target.before.id === VIDEO_PLAYER_ID &&
+      SEAT_ANCHOR_IDS.includes(target.before.previousSibling?.id)) {
+    target = {
+      ...target,
+      before: target.before.nextSibling || null,
+      anchorId: VIDEO_PLAYER_ID + ":after",
+    };
+  }
+
+  const tray = doc?.getElementById?.(TRAY_ID);
+  if (tray?.parentNode === target.parent && tray !== flowTile) {
+    target = {
+      ...target,
+      before: tray.nextSibling || null,
+      anchorId: String(target.anchorId || "sidebar") + ":after-tray",
+    };
+  }
+  return target;
+}
+
+function positionFlowTile(target) {
+  if (!flowTile || !target?.parent) return false;
+  const before = target.before && target.before.parentNode === target.parent
+    ? target.before
+    : null;
+  const alreadyInPlace = flowTile.parentNode === target.parent &&
+    (before === flowTile || flowTile.nextSibling === before);
+  if (alreadyInPlace) return true;
+  try {
+    if (before) target.parent.insertBefore(flowTile, before);
+    else target.parent.appendChild(flowTile);
+    return flowTile.parentNode === target.parent;
+  } catch (error) {
+    consoleWarn("could not seat the in-flow card", error);
+    return false;
+  }
+}
+
+function updateFlowVisibility() {
+  if (!flowTile) return;
+  const hidden = shouldHideFlowCard();
+  flowTile.hidden = hidden;
+  if (flowVisibility === hidden) return;
+  flowVisibility = hidden;
+  if (hidden) flowCard?.stop();
+  else flowCard?.refresh();
+}
+
+function ensureFlowCard(target) {
+  if (!flowTile) {
+    flowTile = doc.createElement("div");
+    flowTile.hidden = shouldHideFlowCard();
+    flowVisibility = flowTile.hidden;
+  }
+  mountHost = target.parent;
+  if (!positionFlowTile(target)) {
+    flowTile.hidden = true;
+    flowVisibility = true;
+    flowCard?.stop();
+    return false;
+  }
+  if (!flowCard) {
+    try {
+      flowCard = createCard({ root: flowTile, mode: "flow" });
+      if (!flowCleanup) flowCleanup = own(destroyFlowCard);
+    } catch (error) {
+      consoleWarn("could not create the in-flow card", error);
+      flowTile.remove();
+      flowTile = null;
+      flowCard = null;
+      flowVisibility = null;
+      mountHost = null;
+      return false;
+    }
+  }
+  updateFlowVisibility();
+  return true;
+}
+
+function destroyFlowCard() {
+  if (flowCard) {
+    try { flowCard.dispose(); } catch (_) {}
+    flowCard = null;
+  }
+  try { flowTile?.remove?.(); } catch (_) {}
+  flowTile = null;
+  flowVisibility = null;
+  mountHost = null;
+}
+
+function isOwnCardMutation(record) {
+  if (!flowTile || !record) return false;
+  if (record.target === flowTile || flowTile.contains?.(record.target)) return true;
+  if (record.type !== "childList") return false;
+  const changed = [...(record.addedNodes || []), ...(record.removedNodes || [])];
+  return Boolean(
+    changed.length &&
+      changed.every((node) => node === flowTile || flowTile.contains?.(node)) &&
+      flowTile.isConnected !== false &&
+      flowTile.parentNode === mountHost,
+  );
+}
+
+function reconnectMountObserver() {
+  if (!mountObserver) return;
+  const nextHost = mountHost?.nodeType === 1 ? mountHost : doc?.documentElement;
+  if (observedMountHost === nextHost) return;
+  try { mountObserver.disconnect(); } catch (_) {}
+  observedMountHost = nextHost || null;
+  if (!nextHost) return;
+  try {
+    // Observe only direct children of the mount host: a child mutation can
+    // replace/reparent an anchor, while our tile's internal DOM is invisible.
+    mountObserver.observe(nextHost, { childList: true });
+  } catch (_) {}
+}
+
+function destroyFlowMount() {
+  if (typeof flowCleanup === "function") {
+    const release = flowCleanup;
+    flowCleanup = null;
+    try { release(); } catch (_) { destroyFlowCard(); }
+  } else {
+    destroyFlowCard();
+  }
+}
+
+function seatFlowCard() {
+  if (disposed) return;
+  if (!enabled()) {
+    mountHost = null;
+    destroyOwnCard();
+    destroyFlowMount();
+    stopFlowMountTracking();
+    return;
+  }
+
+  const target = safeFlowMountTarget();
+  if (!target) {
+    mountHost = null;
+    destroyFlowMount();
+    createSelfCard();
+    reconnectMountObserver();
+    return;
+  }
+
+  destroyOwnCard();
+  mountHost = target.parent;
+  if (!ensureFlowCard(target)) {
+    mountHost = null;
+    destroyFlowMount();
+    createSelfCard();
+  }
+  reconnectMountObserver();
+}
+
+function scheduleMount() {
+  if (disposed || seatTimer !== null) return;
+  seatTimer = setTimer(() => {
+    seatTimer = null;
+    if (disposed || lifecycle?.active === false) return;
+    seatFlowCard();
+  }, 0);
+}
+
+function startFlowMountTracking() {
+  if (disposed || flowTrackingStarted || !enabled()) return;
+  flowTrackingStarted = true;
+  const Observer = window.MutationObserver;
+  if (typeof Observer === "function") {
+    try {
+      mountObserver = new Observer((records) => {
+        if (disposed || !records?.some((record) => !isOwnCardMutation(record))) return;
+        scheduleMount();
+      });
+      reconnectMountObserver();
+    } catch (_) {
+      mountObserver = null;
+    }
+  }
+  for (const [target, type] of [
+    [window, "resize"],
+    [window, "sizemodechange"],
+    [window, "zen-workspace-switched"],
+    [doc, "visibilitychange"],
+  ]) {
+    if (!target || (target === doc && typeof doc.addEventListener !== "function")) continue;
+    const release = listen(target, type, scheduleMount);
+    if (typeof release === "function") flowTrackingReleases.push(release);
+  }
+}
+
+function stopFlowMountTracking() {
+  try { mountObserver?.disconnect?.(); } catch (_) {}
+  mountObserver = null;
+  observedMountHost = null;
+  for (const release of flowTrackingReleases.splice(0).reverse()) {
+    try { release(); } catch (_) {}
+  }
+  flowTrackingStarted = false;
+}
+
+function onEnabledChanged() {
+  if (disposed) return;
+  if (enabled()) startFlowMountTracking();
+  scheduleMount();
+}
+
+function fullCleanup() {
+  if (disposed) return;
+  disposed = true;
+  markerState.disposed = true;
+  if (decisionTimer !== null) {
+    clearTimer(decisionTimer);
+    decisionTimer = null;
+  }
+  if (seatTimer !== null) {
+    clearTimer(seatTimer);
+    seatTimer = null;
+  }
+  stopFlowMountTracking();
+  if (typeof enabledUnregister === "function") {
+    try { enabledUnregister(); } catch (_) {}
+    enabledUnregister = null;
+  }
+  destroyOwnCard();
+  if (typeof flowCleanup === "function") {
+    const release = flowCleanup;
+    flowCleanup = null;
+    try { release(); } catch (_) { destroyFlowCard(); }
+  } else {
+    destroyFlowCard();
+  }
+  for (const instance of [...cardInstances]) {
+    try { instance.dispose(); } catch (_) {}
+  }
+  cardInstances.clear();
+  if (typeof hostUnregister === "function") {
+    try { hostUnregister(); } catch (_) {}
+    hostUnregister = null;
+  }
+  if (window[MARKER] === marker) delete window[MARKER];
+}
+
+const previous = window[MARKER];
+try { previous?.destroy?.(); } catch (_) {}
+marker = { destroy: fullCleanup };
+window[MARKER] = marker;
+const registerHostUnload = adapter.registerHostUnload || runtime?.registerHostUnload;
+if (typeof registerHostUnload === "function") {
+  try {
+    hostUnregister = registerHostUnload.call(runtime, fullCleanup);
+  } catch (error) {
+    consoleWarn("host unload registration failed", error);
+  }
+}
+if (typeof adapter.observeEnabledChange === "function") {
+  try {
+    enabledUnregister = adapter.observeEnabledChange(onEnabledChanged);
+  } catch (error) {
+    consoleWarn("enabled-state observer failed", error);
+  }
+}
+decisionTimer = setTimer(() => {
+  decisionTimer = null;
+  if (disposed || lifecycle?.active === false || !enabled()) return;
+  startFlowMountTracking();
+  scheduleMount();
+}, 0);
+return fullCleanup;
+  }
+
+  targetWindow.__zentralBoostWidgetModule = Object.freeze({ mount: mountBoostWidget });
+})(window);
+
+},
 };
   const texts = {
 
@@ -1299,701 +2289,7 @@ const __zentralEmbeddedLoader = (function () {
 window.__zentralBoostLoader?.destroy?.(); // live re-run replaces the old instance
 window.__zentralBoostLoader = __zentralEmbeddedLoader;
 const __zentralExtras = [
-function (window, runtime, lifecycle) {
-/* Standalone-only Boost card (G10). This file is the BODY of an `extras` function
- * `(window, runtime, lifecycle)`; tools/build-standalone.cjs embeds it in
- * ZentralBoost.standalone.uc.js. It is never loaded by the full pack.
- *
- * Ownership: with only additional/boost/ installed, Boost draws ONE compact card
- * through the shim's sidebar-hover helper. If the standalone Widgets tray is
- * installed first, Boost registers ONE `boost` widget with the tray instead. If
- * Boost is installed first, it publishes a marker; the later tray calls
- * takeOver(), removes the self-contained card and registers the same definition.
- * The full pack short-circuits the whole standalone bundle, so it never sees
- * this file.
- *
- * There is no setInterval, polling or permanent document observer. Every DOM
- * node, listener, one-shot timer, onChange subscription and startSampling() is
- * released by the returned cleanup and by the shim's window-unload hook.
- */
-const doc = window.document;
-const MARKER = "__zentralBoostStandaloneWidget";
-const CARD_ID = "zentral-boost-standalone-card";
-const ANCHOR_ID = "zentral-boost-standalone-anchor";
-const BOOST_ENABLED = "zen.workspace.zentral.boost.enabled";
-const WIDGET_ENABLED = "zen.workspace.zentral.boost.widget_enabled";
-const TOAST_MS = 4000;
-const markerState = { mode: "pending", disposed: false };
-const cardInstances = new Set();
-let disposed = false;
-let decisionTimer = null;
-let hostUnregister = null;
-let ownCardCleanup = null;
-let trayUnregister = null;
-let hover = null;
-let anchor = null;
 
-const consoleWarn = (...args) => {
-  try { window.console?.warn?.("[Zentral Boost standalone widget]", ...args); } catch (_) {}
-};
-const boostApi = () => window.ZentralBoost || null;
-const enabled = () =>
-  runtime.getPref(BOOST_ENABLED, true) !== false &&
-  runtime.getPref(WIDGET_ENABLED, true) !== false;
-const language = () => {
-  const raw = window.navigator?.language || window.navigator?.userLanguage || "en";
-  const api = boostApi();
-  return typeof api?.widgetLanguage === "function" ? api.widgetLanguage(raw) : String(raw).toLowerCase().startsWith("pl") ? "pl" : "en";
-};
-const text = (key, params = null) => {
-  const api = boostApi();
-  if (typeof api?.widgetText === "function") return api.widgetText(language(), key, params);
-  if (key === "card.title") return "Memory Boost";
-  if (key === "card.unknown") return "RAM unknown";
-  return String(key);
-};
-const number = (value, fallback = 0) => {
-  const n = Number(value);
-  return Number.isFinite(n) && n >= 0 ? Math.round(n) : fallback;
-};
-const normalizeSnapshot = (snapshot) => {
-  const s = snapshot && typeof snapshot === "object" ? snapshot : {};
-  const tabs = number(s.tabs ?? s.restorableTabs, 0);
-  return { ...s, panels: number(s.panels, 0), tabs, restorableTabs: number(s.restorableTabs ?? s.tabs, 0) };
-};
-const snapshotOf = (api = boostApi()) => {
-  let game = null;
-  let session = null;
-  try { game = typeof api?.gameModeState === "function" ? api.gameModeState() : null; } catch (_) {}
-  try { session = typeof api?.sessionState === "function" ? api.sessionState() : null; } catch (_) {}
-  return normalizeSnapshot(game?.snapshot || session || {});
-};
-const restorableCount = (snapshot) => number(snapshot?.panels, 0) + number(snapshot?.tabs, 0);
-function fallbackFeedbackText(state) {
-  const src = state && typeof state === "object" ? state : {};
-  const unloaded = src.unloaded && typeof src.unloaded === "object" ? src.unloaded : {};
-  const kept = Array.isArray(src.kept) ? src.kept : [];
-  const names = kept.slice(0, 3).map((entry) => {
-    const row = entry && typeof entry === "object" ? entry : { id: entry };
-    return String(row.id || row.kind || "tab") + " (" + String(row.reason || "kept") + ")";
-  });
-  if (kept.length > 3) names.push(text("feedback.keptMore", { count: kept.length - 3 }));
-  return text("feedback.gameOn", {
-    mb: number(src.freedMB ?? src.finalFreedMB, 0),
-    tabs: number(unloaded.tabs, 0),
-    panels: number(unloaded.panels, 0),
-    kept: names.length ? names.join(", ") : text("feedback.keptNone"),
-  });
-}
-function fallbackOffText(snapshot) {
-  const line = text("feedback.gameOff");
-  const label = restorableCount(snapshot)
-    ? text("card.restoreLabel", { panels: number(snapshot.panels, 0), tabs: number(snapshot.tabs, 0) })
-    : text("card.nothingRestore");
-  return restorableCount(snapshot) ? line + " \u00b7 " + label : line;
-}
-
-function fallbackMenu(api, snapshot, previewLine = "") {
-  const lang = language();
-  const t = (key, params) => text(key, params);
-  const gameOn = Boolean(api?.gameModeState?.()?.on);
-  const count = restorableCount(snapshot);
-  return [
-    { id: "free-light", level: "light", shortLabel: t("card.light"), label: t("card.light"), hint: t("card.lightHint"), available: true },
-    { id: "free-deep", level: "deep", shortLabel: t("card.deep"), label: t("card.deep"), hint: t("card.deepHint"), available: Boolean(api?.runLevel2) },
-    { id: "game-mode", level: "game", shortLabel: t("card.game"), label: t("card.game"), hint: previewLine || t(gameOn ? "card.gameHintOn" : "card.gameHint"), available: Boolean(api?.setGameMode), checked: gameOn },
-    { id: "restore", level: "restore", shortLabel: t("card.restore"), label: count ? api?.widgetRestoreLabel?.(snapshot, lang) || t("card.restoreLabel", { panels: number(snapshot.panels, 0), tabs: number(snapshot.tabs ?? snapshot.restorableTabs, 0) }) : t("card.nothingRestore"), hint: count ? t("card.restoreHint") : t("card.nothingRestore"), available: count > 0 && Boolean(api?.restoreSession || api?.restore) },
-  ];
-}
-
-function menuItems(api, snapshot, previewLine = "") {
-  const lang = language();
-  const state = typeof api?.state === "function" ? api.state() : {};
-  const game = typeof api?.gameModeState === "function" ? api.gameModeState() : { on: false };
-  const options = {
-    previewHint: previewLine,
-    running: Boolean(state.level2Busy),
-    canDeep: state.policy !== false,
-    canGameMode: typeof api?.setGameMode === "function",
-    canRestore: typeof api?.restoreSession === "function" || typeof api?.restore === "function",
-    gameMode: game,
-    snapshot,
-    language: lang,
-    undoSize: number(state.undoSize, 0),
-    restoreLabel: typeof api?.widgetRestoreLabel === "function" ? api.widgetRestoreLabel(snapshot, lang) : "",
-  };
-  const items = typeof api?.widgetMenu === "function" ? api.widgetMenu(options) : fallbackMenu(api, snapshot, previewLine);
-  return Array.isArray(items) ? items : fallbackMenu(api, snapshot, previewLine);
-}
-
-function createCard({ root, mode }) {
-  const lang = language();
-  const cardReleases = [];
-  const actionReleases = [];
-  let actionToastRelease = null;
-  let toastTimer = null;
-  let wantsActive = false;
-  let subscribed = false;
-  let sampling = false;
-  let samplingApi = null;
-  let unsubChange = null;
-  let unsubGameModeEvents = null;
-  let gameModeEventCount = 0;
-  let cardDisposed = false;
-
-  const ownListen = (target, type, fn, options, bucket = cardReleases) => {
-    if (!target || typeof target.addEventListener !== "function") return () => {};
-    const release = lifecycle.listen(target, type, fn, options);
-    bucket.push(release);
-    return release;
-  };
-  const clearActions = () => {
-    for (const release of actionReleases.splice(0).reverse()) {
-      try { release(); } catch (_) {}
-    }
-    while (root.querySelector?.("[data-zw-boost-action]")) {
-      const node = root.querySelector("[data-zw-boost-action]");
-      node.remove();
-    }
-    const popup = root.querySelector?.(".zbsw-popup");
-    if (popup) while (popup.children?.length) popup.children[0].remove();
-  };
-  const clearToast = () => {
-    if (toastTimer !== null) {
-      lifecycle.clearTimeout(toastTimer);
-      toastTimer = null;
-    }
-    if (actionToastRelease) {
-      try { actionToastRelease(); } catch (_) {}
-      actionToastRelease = null;
-    }
-    const toast = root.querySelector?.(".zbsw-toast");
-    if (toast) {
-      while (toast.children?.length) toast.children[0].remove();
-      toast.textContent = "";
-      toast.hidden = true;
-    }
-  };
-
-  root.setAttribute("class", "zbsw-card" + (mode === "tray" ? " zbsw-tray-card" : ""));
-  root.setAttribute("role", "group");
-  root.setAttribute("aria-label", text("card.title"));
-  const row = doc.createElement("div");
-  row.className = "zbsw-row";
-  const valueEl = doc.createElement("span");
-  valueEl.className = "zbsw-value";
-  valueEl.textContent = "\u2014";
-  const labelEl = doc.createElement("span");
-  labelEl.className = "zbsw-label";
-  labelEl.textContent = text("card.title");
-  const popup = doc.createElement("div");
-  popup.className = "zbsw-popup";
-  popup.setAttribute("role", "group");
-  popup.setAttribute("aria-label", "Boost levels and Restore");
-  popup.hidden = false;
-  row.appendChild(valueEl);
-  row.appendChild(labelEl);
-  row.appendChild(popup);
-  root.appendChild(row);
-  const hintEl = doc.createElement("div");
-  hintEl.className = "zbsw-hint";
-  hintEl.hidden = true;
-  root.appendChild(hintEl);
-  const toastEl = doc.createElement("div");
-  toastEl.className = "zbsw-toast";
-  toastEl.setAttribute("role", "status");
-  toastEl.hidden = true;
-  root.appendChild(toastEl);
-
-  function paintValue() {
-    const api = boostApi();
-    let mb = null;
-    try { mb = typeof api?.lastMB === "function" ? api.lastMB() : null; } catch (_) {}
-    if (!Number.isFinite(Number(mb)) || Number(mb) <= 0) {
-      try { mb = typeof api?.memoryMB === "function" ? api.memoryMB() : null; } catch (_) {}
-    }
-    const value = Number(mb);
-    valueEl.textContent = Number.isFinite(value) && value > 0
-      ? text("card.ram", { mb: Math.round(value) })
-      : "\u2014";
-    root.setAttribute("data-zw-boost", Number.isFinite(value) && value > 0 ? String(Math.round(value)) : "");
-    root.setAttribute("aria-label", Number.isFinite(value) && value > 0
-      ? text("card.ram", { mb: Math.round(value) }) + " \u00b7 " + text("card.title")
-      : text("card.unknown"));
-  }
-
-  function computePreviewLine() {
-    const api = boostApi();
-    if (!api || typeof api.previewGameMode !== "function" || api.gameModeState?.()?.on) return "";
-    let preview = null;
-    try { preview = api.previewGameMode(); } catch (_) { preview = null; }
-    return typeof api.widgetPreviewText === "function"
-      ? api.widgetPreviewText(preview, language())
-      : text("card.preview", { tabs: number(preview?.counts?.tabs, 0), panels: number(preview?.counts?.panels, 0) });
-  }
-
-  function previewHint() {
-    const line = computePreviewLine();
-    if (!line) return;
-    hintEl.textContent = line;
-    hintEl.setAttribute("data-zw-boost-preview", line);
-    hintEl.hidden = false;
-  }
-
-  function paintMenu() {
-    clearActions();
-    const api = boostApi();
-    const snapshot = snapshotOf(api);
-    const items = menuItems(api, snapshot, computePreviewLine());
-    for (const item of items) {
-      const button = doc.createElement("button");
-      button.type = "button";
-      button.className = "zbsw-action";
-      button.setAttribute("data-zw-boost-action", item.id);
-      if (item.level) button.setAttribute("data-zw-boost-level", item.level);
-      button.textContent = item.shortLabel || item.label || item.id;
-      button.setAttribute("aria-label", item.label || item.shortLabel || item.id);
-      const hints = [item.description, item.hint].filter(Boolean).join(" \u00b7 ");
-      if (hints) button.setAttribute("title", hints);
-      if (item.checked !== undefined) {
-        button.setAttribute("role", "switch");
-        button.setAttribute("aria-checked", item.checked ? "true" : "false");
-      }
-      button.disabled = item.available === false;
-      if (button.disabled) button.setAttribute("aria-disabled", "true");
-      if (item.available !== false) {
-        ownListen(button, "click", (event) => {
-          event?.preventDefault?.();
-          event?.stopPropagation?.();
-          void runAction(item.id);
-        }, undefined, actionReleases);
-        if (item.id === "game-mode") {
-          ownListen(button, "mouseenter", previewHint, undefined, actionReleases);
-          ownListen(button, "focus", previewHint, undefined, actionReleases);
-        }
-      }
-      popup.appendChild(button);
-    }
-  }
-
-  // G7: one event door from the Boost module. The card never asks for a second measurement; it paints the
-  // dry-run hint, the G8 settled/final report and the OFF Restore toast from the state Boost already owns.
-  function handleGameModeEvent(event) {
-    const api = boostApi();
-    const action = String(event?.action || "");
-    if (action === "on") {
-      gameModeEventCount += 1;
-      showToast(text("feedback.gameStarting"));
-      return;
-    }
-    if (action === "on-settle" || action === "on-final") {
-      const state = event?.state || (typeof api?.gameModeState === "function" ? api.gameModeState() : {});
-      const line = typeof api?.widgetFeedbackText === "function"
-        ? api.widgetFeedbackText(state, language())
-        : fallbackFeedbackText(state);
-      showToast(line);
-      paintMenu();
-      return;
-    }
-    if (action === "off") {
-      gameModeEventCount += 1;
-      const snapshot = normalizeSnapshot(event?.state?.snapshot || snapshotOf(api));
-      const line = typeof api?.widgetOffText === "function"
-        ? api.widgetOffText(snapshot, language())
-        : fallbackOffText(snapshot);
-      const restoreAction = restorableCount(snapshot)
-        ? { label: text("feedback.restoreAction"), run: () => { void runAction("restore"); } }
-        : null;
-      showToast(line, restoreAction);
-      paintMenu();
-      return;
-    }
-    if (action === "restored") paintMenu();
-  }
-
-  function subscribeGameModeEvents() {
-    if (cardDisposed || unsubGameModeEvents) return;
-    const api = boostApi();
-    if (!api || typeof api.onGameModeEvent !== "function") return;
-    try {
-      unsubGameModeEvents = api.onGameModeEvent(handleGameModeEvent);
-    } catch (_) {
-      unsubGameModeEvents = null;
-    }
-  }
-  function releaseGameModeEvents() {
-    if (unsubGameModeEvents) {
-      try { unsubGameModeEvents(); } catch (_) {}
-      unsubGameModeEvents = null;
-    }
-  }
-
-  function showToast(message, action = null) {
-    clearToast();
-    toastEl.textContent = String(message || "");
-    toastEl.hidden = false;
-    if (action && typeof action.run === "function") {
-      toastEl.textContent = "";
-      const line = doc.createElement("span");
-      line.className = "zbsw-toast-line";
-      line.textContent = String(message || "");
-      toastEl.appendChild(line);
-      const button = doc.createElement("button");
-      button.type = "button";
-      button.className = "zbsw-toast-action";
-      button.textContent = action.label || text("card.restore");
-      actionToastRelease = ownListen(button, "click", (event) => {
-        event?.preventDefault?.();
-        event?.stopPropagation?.();
-        action.run();
-      });
-      toastEl.appendChild(button);
-    }
-    toastTimer = lifecycle.setTimeout(() => {
-      toastTimer = null;
-      clearToast();
-    }, TOAST_MS);
-  }
-
-  async function runAction(id) {
-    const api = boostApi();
-    if (!api) return null;
-    if (id === "free-light" && typeof api.runLevel1 === "function") {
-      showToast(text("card.busy"));
-      let result = null;
-      try { result = await api.runLevel1(); } catch (_) { result = null; }
-      showToast(typeof api.widgetResultText === "function"
-        ? api.widgetResultText(result, language())
-        : text("card.result", { mb: number(result?.freedMB, 0) }));
-      paintValue();
-      paintMenu();
-      return result;
-    }
-    if (id === "free-deep" && typeof api.runLevel2 === "function") {
-      showToast(text("card.busy"));
-      let result = null;
-      try { result = await api.runLevel2(); } catch (_) { result = null; }
-      showToast(typeof api.widgetResultText === "function"
-        ? api.widgetResultText(result, language())
-        : text("card.result", { mb: number(result?.freedMB, 0) }));
-      paintValue();
-      paintMenu();
-      return result;
-    }
-    if (id === "game-mode" && typeof api.setGameMode === "function") {
-      previewHint();
-      const next = !Boolean(api.gameModeState?.()?.on);
-      const eventsBefore = gameModeEventCount;
-      let result = null;
-      try { result = api.setGameMode(next); } catch (_) { result = null; }
-      if (gameModeEventCount === eventsBefore)
-        showToast(text(next ? "card.gameOn" : "card.gameOff"));
-      paintMenu();
-      return result;
-    }
-    if (id === "restore") {
-      const before = snapshotOf(api);
-      let result = null;
-      try {
-        result = typeof api.restoreSession === "function" ? api.restoreSession() : api.restore?.();
-      } catch (_) { result = null; }
-      showToast(text("card.restoreDone", {
-        panels: number(before.panels, 0),
-        tabs: number(before.tabs, 0),
-      }));
-      paintMenu();
-      return result;
-    }
-    return null;
-  }
-
-  function start() {
-    if (cardDisposed) return;
-    wantsActive = true;
-    const api = boostApi();
-    if (!api) return;
-    if (!subscribed && typeof api.onChange === "function") {
-      try {
-        unsubChange = api.onChange(() => paintValue());
-        subscribed = true;
-      } catch (_) { unsubChange = null; subscribed = false; }
-    }
-    if (!sampling && typeof api.startSampling === "function") {
-      // Capture the API: the shim disposes the Boost feature before extras cleanup, so a later
-      // window.ZentralBoost lookup would be null and stopSampling() would be missed.
-      try { api.startSampling(); sampling = true; samplingApi = api; } catch (_) { sampling = false; samplingApi = null; }
-    }
-    subscribeGameModeEvents();
-  }
-  function stop() {
-    wantsActive = false;
-    releaseGameModeEvents();
-    const api = samplingApi || boostApi();
-    if (sampling) {
-      try { api?.stopSampling?.(); } catch (_) {}
-      sampling = false;
-      samplingApi = null;
-    }
-    if (unsubChange) {
-      try { unsubChange(); } catch (_) {}
-      unsubChange = null;
-    }
-    subscribed = false;
-  }
-  function refresh() {
-    if (cardDisposed) return;
-    start();
-    paintValue();
-    paintMenu();
-  }
-  function teardown() {
-    if (cardDisposed) return;
-    cardDisposed = true;
-    stop();
-    clearToast();
-    clearActions();
-    for (const release of cardReleases.splice(0).reverse()) {
-      try { release(); } catch (_) {}
-    }
-    cardInstances.delete(instance);
-  }
-  const instance = {
-    element: root,
-    fetch() {
-      refresh();
-      const api = boostApi();
-      return { mb: typeof api?.lastMB === "function" ? api.lastMB() : null, available: Boolean(api) };
-    },
-    render: refresh,
-    refresh,
-    paintValue,
-    paintMenu,
-    runAction,
-    showToast,
-    previewHint,
-    start,
-    stop,
-    dispose: teardown,
-  };
-  cardInstances.add(instance);
-  ownListen(doc, "keydown", (event) => {
-    if (event?.key !== "Escape") return;
-    hintEl.hidden = true;
-    clearToast();
-  });
-  refresh();
-  return instance;
-}
-
-function trayDefinition() {
-  return {
-    id: "boost",
-    title: text("card.title"),
-    showHeader: false,
-    order: 50,
-    pref: WIDGET_ENABLED,
-    defaultEnabled: true,
-    refreshMs: 0,
-    create(args = {}) {
-      const cardDoc = args.document || doc;
-      const root = cardDoc.createElement("div");
-      const instance = createCard({ root, mode: "tray" });
-      const release = lifecycle.own(() => {
-        instance.dispose();
-        root.remove();
-      });
-      return { ...instance, dispose() { release(); } };
-    },
-  };
-}
-
-function registerWithTray(handoff) {
-  const register = typeof handoff === "function" ? handoff : handoff?.registerWidget;
-  if (typeof register !== "function") return false;
-  destroyOwnCard();
-  try {
-    register(trayDefinition());
-    markerState.mode = "tray";
-    const unregister = typeof handoff === "function" ? null : handoff.unregisterWidget;
-    trayUnregister = typeof unregister === "function" ? () => unregister("boost") : null;
-    return true;
-  } catch (error) {
-    consoleWarn("tray registration failed", error);
-    return false;
-  }
-}
-
-function destroyOwnCard() {
-  if (ownCardCleanup) {
-    try { ownCardCleanup(); } catch (error) { consoleWarn("card cleanup failed", error); }
-    ownCardCleanup = null;
-  }
-  hover = null;
-  anchor = null;
-}
-
-function createSelfCard() {
-  if (ownCardCleanup || markerState.mode === "tray") return;
-  if (!doc || typeof doc.createElement !== "function" || typeof doc.documentElement?.append !== "function") return;
-  let card = null;
-  const localAnchor = doc.createElement("button");
-  localAnchor.type = "button";
-  localAnchor.id = ANCHOR_ID;
-  localAnchor.className = "zbsw-anchor";
-  localAnchor.setAttribute("aria-label", text("card.title"));
-  localAnchor.textContent = text("card.title");
-  const rect = runtime.nativeSidebarRect();
-  localAnchor.style.left = Math.max(4, number(rect.left, 4)) + "px";
-  localAnchor.style.top = Math.max(4, number(rect.top, 4)) + "px";
-  doc.documentElement.appendChild(localAnchor);
-
-  const localHover = runtime.createSidebarHoverCard({
-    window,
-    document: doc,
-    id: CARD_ID,
-    className: "zentral-boost-standalone-card",
-    role: "group",
-    ariaLabel: text("card.title"),
-    defaultWidth: 300,
-    defaultHeight: 26,
-    getShowDelay: () => 0,
-    getHideDelay: () => 0,
-    getGap: () => 6,
-    getSide: () => "auto",
-    getBounds: () => {
-      const r = runtime.nativeSidebarRect();
-      return { left: number(r.left, 0), right: number(r.right, window.innerWidth || 1200) };
-    },
-    isEnabled: () => !disposed && enabled(),
-    isValid: (target) => Boolean(target && target.isConnected !== false),
-    setTimer: (fn, ms) => lifecycle.setTimeout(fn, ms),
-    clearTimer: (id) => lifecycle.clearTimeout(id),
-    onCreate(node) {
-      card = createCard({ root: node, mode: "self" });
-    },
-    render() {
-      card?.refresh();
-    },
-    onShow() {
-      card?.start();
-    },
-    onHide() {
-      card?.stop();
-    },
-  });
-  const releaseHover = lifecycle.own(() => {
-    try { localHover.destroy(); } catch (_) {}
-  });
-  const releaseAnchor = lifecycle.own(() => {
-    try { localAnchor.remove(); } catch (_) {}
-  });
-  const releaseCard = lifecycle.own(() => {
-    try { card?.dispose(); } catch (_) {}
-    card = null;
-  });
-  ownListenSelf(localAnchor, "mouseenter", () => localHover.show(localAnchor));
-  ownListenSelf(localAnchor, "focus", () => localHover.show(localAnchor));
-  ownListenSelf(window, "resize", () => localHover.position());
-  ownCardCleanup = lifecycle.own(() => {
-    releaseCard();
-    releaseHover();
-    releaseAnchor();
-    hover = null;
-    anchor = null;
-  });
-  hover = localHover;
-  anchor = localAnchor;
-  try {
-    localHover.show(localAnchor);
-    markerState.mode = "self";
-  } catch (error) {
-    consoleWarn("self-contained card failed", error);
-    destroyOwnCard();
-  }
-}
-
-function ownListenSelf(target, type, fn, options) {
-  if (!target || typeof target.addEventListener !== "function") return;
-  lifecycle.listen(target, type, fn, options);
-}
-
-function decideOwner() {
-  decisionTimer = null;
-  if (disposed || !lifecycle.active || markerState.mode === "tray") return;
-  if (!enabled()) {
-    markerState.mode = "hidden";
-    return;
-  }
-  const tray = window.ZentralWidgets;
-  const hasBuiltInBoost = typeof tray?.listWidgets === "function" &&
-    tray.listWidgets().some((row) => row && row.id === "boost");
-  if (hasBuiltInBoost) {
-    markerState.mode = "tray";
-    return;
-  }
-  if (tray && typeof tray.registerWidget === "function") {
-    if (registerWithTray({
-      registerWidget: tray.registerWidget,
-      unregisterWidget: tray.unregisterWidget,
-    })) return;
-  }
-  createSelfCard();
-}
-
-const previous = window[MARKER];
-try { previous?.destroy?.(); } catch (_) {}
-const marker = {
-  id: "boost",
-  version: 1,
-  get mode() { return markerState.mode; },
-  visible: enabled,
-  refresh() {
-    for (const instance of [...cardInstances]) {
-      try { instance.refresh(); } catch (error) { consoleWarn("refresh failed", error); }
-    }
-  },
-  takeOver(handoff) {
-    if (disposed || markerState.mode === "tray") return false;
-    return registerWithTray(handoff);
-  },
-  destroy: fullCleanup,
-};
-window[MARKER] = marker;
-
-function fullCleanup() {
-  if (disposed) return;
-  disposed = true;
-  markerState.disposed = true;
-  if (decisionTimer !== null) {
-    lifecycle.clearTimeout(decisionTimer);
-    decisionTimer = null;
-  }
-  destroyOwnCard();
-  for (const instance of [...cardInstances]) {
-    try { instance.dispose(); } catch (_) {}
-  }
-  cardInstances.clear();
-  if (trayUnregister) {
-    try { trayUnregister(); } catch (_) {}
-    trayUnregister = null;
-  }
-  if (hostUnregister) {
-    try { hostUnregister(); } catch (_) {}
-    hostUnregister = null;
-  }
-  if (window[MARKER] === marker) delete window[MARKER];
-}
-
-hostUnregister = runtime.registerHostUnload(fullCleanup);
-decisionTimer = lifecycle.setTimeout(() => {
-  decideOwner();
-  // One post-native-ready refresh lets a tray card created before window.ZentralBoost
-  // bind the API without polling or a second registration.
-  marker.refresh();
-}, 0);
-return fullCleanup;
-
-},
 ];
 const __zentralRegister = __zentralShim.register;
 __zentralShim.register = function (def) {
@@ -2221,6 +2517,123 @@ __zentralShim.register = function (def) {
   window.ZentralTabPolicy = api;
 })();
 
+// ---- shared: loader/ZentralSidebarMount.js
+/* Shared, pure safe insertion-point selection for sidebar chrome.
+ *
+ * The result is { parent, before, anchorId }; callers decide how to mount and
+ * observe their own node. Keeping selection here gives sidebar features the
+ * same anchor priority and video-player adjacency rule. */
+(function installZentralSidebarMount(targetWindow) {
+  "use strict";
+
+  const VIDEO_PLAYER_ID = "zentral-video-preview";
+  const ANCHOR_IDS = Object.freeze([
+    "zen-media-controls-toolbar",
+    "zen-sidebar-bottom-buttons",
+    "tabbrowser-tabs",
+    "vertical-tabs",
+  ]);
+  const VIDEO_ANCHOR_IDS = new Set(ANCHOR_IDS);
+
+  function safeStyle(element, win) {
+    if (!element || typeof win?.getComputedStyle !== "function") return null;
+    try {
+      return win.getComputedStyle(element);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function safeRect(element) {
+    if (!element || typeof element.getBoundingClientRect !== "function") return null;
+    try {
+      const rect = element.getBoundingClientRect();
+      return rect && [rect.top, rect.bottom, rect.left, rect.right, rect.width, rect.height].every(Number.isFinite)
+        ? rect
+        : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function isElementHidden(element, win) {
+    if (!element || element.hidden) return true;
+    const style = safeStyle(element, win);
+    return Boolean(style && (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse"));
+  }
+
+  function isAncestorVisible(element, win) {
+    for (let parent = element?.parentElement || element?.parentNode; parent; parent = parent.parentElement || parent.parentNode) {
+      if (parent.hidden) return false;
+      const style = safeStyle(parent, win);
+      if (style?.display === "none" || style?.visibility === "collapse") return false;
+    }
+    return true;
+  }
+
+  function resolveTabsHost(doc, win) {
+    if (!doc || typeof doc.getElementById !== "function") return null;
+    const candidates = [
+      doc.getElementById("tabbrowser-tabs"),
+      doc.getElementById("vertical-tabs"),
+    ].filter(Boolean);
+    if (!candidates.length) return null;
+
+    for (const element of candidates) {
+      if (isElementHidden(element, win)) continue;
+      const rect = safeRect(element);
+      if (!rect || rect.height > 0) return element;
+    }
+    for (const element of candidates) {
+      if (!isElementHidden(element, win)) return element;
+    }
+    return candidates[0];
+  }
+
+  function chooseBottomMount(doc, win, fallbackSidebar = null) {
+    if (!doc || typeof doc.getElementById !== "function") return null;
+
+    const media = doc.getElementById("zen-media-controls-toolbar");
+    if (media?.parentNode && isAncestorVisible(media, win)) {
+      return { parent: media.parentNode, before: media, anchorId: "zen-media-controls-toolbar" };
+    }
+
+    const bottom = doc.getElementById("zen-sidebar-bottom-buttons");
+    if (bottom?.parentNode && isAncestorVisible(bottom, win)) {
+      return { parent: bottom.parentNode, before: bottom, anchorId: "zen-sidebar-bottom-buttons" };
+    }
+
+    const video = doc.getElementById(VIDEO_PLAYER_ID);
+    const tabs = resolveTabsHost(doc, win);
+    if (tabs?.parentNode && isAncestorVisible(tabs, win)) {
+      let before = tabs.nextSibling;
+      // If the player follows the tab anchor, insert after the player, never between the pair.
+      if (before?.id === VIDEO_PLAYER_ID) before = before.nextSibling;
+      return { parent: tabs.parentNode, before: before || null, anchorId: tabs.id || "tabs" };
+    }
+
+    if (video?.parentNode && isAncestorVisible(video, win)) {
+      const previous = video.previousSibling;
+      if (previous && VIDEO_ANCHOR_IDS.has(previous.id)) {
+        return { parent: video.parentNode, before: video.nextSibling || null, anchorId: VIDEO_PLAYER_ID + ":after" };
+      }
+      return { parent: video.parentNode, before: video, anchorId: VIDEO_PLAYER_ID + ":before" };
+    }
+
+    const sidebar = doc.getElementById("navigator-toolbox") || fallbackSidebar || null;
+    if (sidebar) {
+      return { parent: sidebar, before: null, anchorId: sidebar.id || "sidebar" };
+    }
+    return null;
+  }
+
+  targetWindow.__zentralSidebarMount = Object.freeze({
+    chooseBottomMount,
+    anchorIds: ANCHOR_IDS,
+    videoPlayerId: VIDEO_PLAYER_ID,
+  });
+})(window);
+
 /*
  * ZENTRAL FILE GUIDE - additional/boost/ZentralBoost.uc.js
  *
@@ -2248,9 +2661,21 @@ __zentralShim.register = function (def) {
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
       .Services;
   const ZentralRuntime = window.ZentralRuntime || window.__zentralStandaloneRuntime;
+  const boostModuleLoader = window.__zentralBoostLoader || window.__zentralBoostLoader;
+  // The same source is embedded by the standalone manifest and preloaded by the full-pack catalog.
+  // Calling load here is idempotent in both loaders and keeps the public Boost API independent of Widgets.
+  try {
+    if (!window.__zentralBoostWidgetModule)
+      boostModuleLoader?.load?.("additional/boost/ZentralBoostWidget.js", { owner: "boost" });
+  } catch (error) {
+    console.warn("[Zentral Boost] widget source unavailable", error);
+  }
 
   const PREF = Object.freeze({
     ENABLED: "zen.workspace.zentral.boost.enabled",
+    WIDGET_ENABLED: "zen.workspace.zentral.boost.widget_enabled",
+    // W5: import a saved Widgets-owned toggle once; the old preference is read-only and is never cleared.
+    LEGACY_WIDGET_ENABLED: "zen.workspace.zentral.widgets.boost.enabled",
     STARTUP_TRIM: "zen.workspace.zentral.boost.startup_trim",
     // OW-112: the old `keep_pinned` name said the opposite of what it did — `true` meant a deep pass MAY UNLOAD
     // pinned/Essential tabs. The checkbox label always said so; now the pref does too. Off by default, unchanged.
@@ -2428,9 +2853,9 @@ __zentralShim.register = function (def) {
   // B4.3: what a panel record may do in the background. `live` is the default for every existing record.
   const BACKGROUND_MODES = Object.freeze(["live", "throttled", "asleep-allowed"]);
 
-  /* G10: strings and pure card data shared by the full-pack tray and the standalone Boost card. The standalone
-   * package has no Widgets source, so Boost owns its own words here; nothing in this block reads a pref, touches
-   * the DOM, starts a timer or samples RAM. Language comes from the caller (browser locale or Widgets language). */
+  /* G10: strings and pure card data for Boost's shared in-flow tile and its no-target fallback. The standalone
+   * package has no Widgets source, so Boost owns its words here; this block reads no prefs, touches no DOM, starts
+   * no timer and samples no RAM. Language comes from the browser locale supplied by the card adapter. */
   const BOOST_WIDGET_STRINGS = Object.freeze({
     en: Object.freeze({
       "card.title": "Memory Boost",
@@ -2441,18 +2866,27 @@ __zentralShim.register = function (def) {
       "card.game": "Game",
       "card.restore": "Restore",
       "card.lightHint": "Light: GC/CC + memory minimize. No tabs touched.",
-      "card.deepHint": "Deep: Light clean first, then eligible tabs sleep.",
-      "card.gameHint": "Game Mode: one plan-driven cleanup pass.",
-      "card.gameHintOn": "Game Mode is on. Switch it off to Restore.",
+      "card.deepHint": "Deep: Light clean first, then eligible tabs sleep. Restore available.",
+      "card.gameHint": "Game Mode: pauses repeating features and idles non-essential browsers.",
+      "card.gameHintOn": "Game Mode on — timers paused, background tabs idle",
       "card.deepSoon": "Needs the shared tab policy",
-      "card.restoreHint": "Restore: wake the saved Game Mode snapshot.",
+      "card.restoreHint": "Restore: reloads what was unloaded — panels as panels, tabs as tabs.",
       "card.nothingRestore": "Nothing to restore yet",
       "card.busy": "Working\u2026",
       "card.result": "Freed {mb} MB",
-      "card.deepResult": "Put {tabs} tab(s) and {panels} app(s) to sleep \u00b7 freed {mb} MB",
-      "card.gameOn": "Game Mode on",
-      "card.gameOff": "Game Mode off",
+      "card.nothingFreed": "Memory was already tidy",
+      "card.resultSkipped": " · skipped {count} protected tab(s)",
+      "card.skipped": "Last deep pass kept: {reasons}",
+      "card.loaded": "Loaded tabs: {pinned} pinned, {unpinned} unpinned",
+      "card.deepResult": "Put {tabs} tab(s) and {panels} panel(s) to sleep, freed {mb} MB",
+      "card.gameOn": "Game Mode on — timers paused, background tabs idle",
+      "card.gameOff": "Game Mode off — everything back to normal",
       "card.restoreDone": "Restoring {panels} apps and {tabs} tabs",
+      "card.restored": "Woke {count} panel(s)",
+      "card.restoredTabs": "{count} sleeping tab(s) ready to reload on click",
+      "card.limitHit": "{mb} MB in use, above your {limit} MB limit. Open Boost to free memory.",
+      "card.limitDone": "Freed memory down to {mb} MB",
+      "card.limitNothing": "Memory is high, but nothing else may be unloaded",
       "card.preview": "Will free about {tabs} tabs and {panels} apps before Game Mode starts",
       "card.restoreLabel": "Restore ({panels} apps, {tabs} tabs)",
       "feedback.gameOn": "Game Mode: freed {mb} MB · {tabs} tabs, {panels} apps unloaded · kept: {kept}",
@@ -2471,18 +2905,27 @@ __zentralShim.register = function (def) {
       "card.game": "Gra",
       "card.restore": "Przywr\u00f3\u0107",
       "card.lightHint": "Lekko: GC/CC i minimalizacja pami\u0119ci. Karty nie s\u0105 ruszane.",
-      "card.deepHint": "G\u0142\u0119boko: najpierw lekkie czyszczenie, potem usypianie kart.",
-      "card.gameHint": "Tryb gry: jeden planowy przebieg czyszczenia.",
-      "card.gameHintOn": "Tryb gry jest w\u0142\u0105czony. Wy\u0142\u0105cz go, aby przywr\u00f3ci\u0107.",
+      "card.deepHint": "Głęboko: najpierw lekkie czyszczenie, potem usypianie kart. Dostępne Przywróć.",
+      "card.gameHint": "Tryb gry: wstrzymuje cykliczne funkcje i wygasza niepotrzebne karty.",
+      "card.gameHintOn": "Tryb gry włączony — liczniki wstrzymane, karty w tle bezczynne",
       "card.deepSoon": "Wymaga wsp\u00f3lnej polityki kart",
-      "card.restoreHint": "Przywr\u00f3\u0107: obud\u017a zapisany stan Trybu gry.",
+      "card.restoreHint": "Przywróć: wczytuje to, co zostało uśpione — panele jako panele, karty jako karty.",
       "card.nothingRestore": "Nie ma jeszcze czego przywraca\u0107",
       "card.busy": "Pracuj\u0119\u2026",
       "card.result": "Zwolniono {mb} MB",
-      "card.deepResult": "U\u015bpiono {tabs} kart i {panels} aplikacji \u00b7 zwolniono {mb} MB",
-      "card.gameOn": "Tryb gry w\u0142\u0105czony",
-      "card.gameOff": "Tryb gry wy\u0142\u0105czony",
+      "card.nothingFreed": "Pamięć była już uporządkowana",
+      "card.resultSkipped": " · pominięto {count} chronionych kart",
+      "card.skipped": "Ostatnie głębokie czyszczenie zostawiło: {reasons}",
+      "card.loaded": "Wczytane karty: {pinned} przypiętych, {unpinned} nieprzypiętych",
+      "card.deepResult": "Uśpiono {tabs} kart i {panels} paneli, zwolniono {mb} MB",
+      "card.gameOn": "Tryb gry włączony — liczniki wstrzymane, karty w tle bezczynne",
+      "card.gameOff": "Tryb gry wyłączony — wszystko wraca do normy",
       "card.restoreDone": "Przywracanie {panels} aplikacji i {tabs} kart",
+      "card.restored": "Obudzono {count} paneli",
+      "card.restoredTabs": "{count} uśpionych kart wczyta się po kliknięciu",
+      "card.limitHit": "W użyciu {mb} MB, powyżej limitu {limit} MB. Otwórz Boost, aby zwolnić pamięć.",
+      "card.limitDone": "Zwolniono pamięć do {mb} MB",
+      "card.limitNothing": "Pamięć jest wysoka, ale nie ma już czego zwalniać",
       "card.preview": "U\u015bpi oko\u0142o {tabs} kart i {panels} aplikacji przed w\u0142\u0105czeniem Trybu gry",
       "card.restoreLabel": "Przywr\u00f3\u0107 ({panels} aplikacji, {tabs} kart)",
       "feedback.gameOn": "Tryb gry: zwolniono {mb} MB \u00b7 {tabs} kart, {panels} aplikacji u\u015bpionych \u00b7 zachowano: {kept}",
@@ -2510,6 +2953,23 @@ __zentralShim.register = function (def) {
     const n = Number(value);
     return Number.isFinite(n) && n >= 0 ? Math.round(n) : fallback;
   }
+  function boostWidgetSkippedLine(reasons) {
+    if (!reasons || typeof reasons !== "object") return "";
+    return Object.entries(reasons)
+      .map(([reason, count]) => [String(reason), Number(count) || 0])
+      .filter(([, count]) => Number.isFinite(count) && count > 0)
+      .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+      .map(([reason, count]) => reason + ": " + count)
+      .join(" · ");
+  }
+  function boostWidgetSkippedCount(result) {
+    const counts = result && typeof result === "object" ? result.skippedCounts : null;
+    if (!counts || typeof counts !== "object") return 0;
+    return Object.values(counts).reduce((sum, value) => {
+      const count = Number(value);
+      return Number.isFinite(count) && count > 0 ? sum + Math.floor(count) : sum;
+    }, 0);
+  }
   function boostWidgetMenuItems(options = {}) {
     const language = boostWidgetLanguage(options.language);
     const t = (key, params) => boostWidgetText(language, key, params);
@@ -2522,7 +2982,9 @@ __zentralShim.register = function (def) {
     const gameHint = !gameOn && options.previewHint
       ? String(options.previewHint)
       : t(gameOn ? "card.gameHintOn" : "card.gameHint");
-    return [
+    const skippedLine = boostWidgetSkippedLine(options.skipped);
+    const loadedTabs = options.loadedTabs && typeof options.loadedTabs === "object" ? options.loadedTabs : {};
+    const items = [
       {
         id: "free-light", level: "light", shortLabel: t("card.light"), label: t("card.light"),
         description: t("card.lightHint"), hint: t("card.lightHint"), available: !running,
@@ -2545,6 +3007,18 @@ __zentralShim.register = function (def) {
         available: options.canRestore !== false && !running && restorable > 0,
       },
     ];
+    if (skippedLine) {
+      items.push({
+        id: "deep-skipped",
+        label: t("card.skipped", { reasons: skippedLine }),
+        available: false,
+        hint: t("card.loaded", {
+          pinned: boostWidgetNumber(loadedTabs.pinned, 0),
+          unpinned: boostWidgetNumber(loadedTabs.unpinned, 0),
+        }),
+      });
+    }
+    return items;
   }
   function boostWidgetPreviewText(preview, language) {
     const counts = preview && typeof preview === "object" ? (preview.counts || preview) : {};
@@ -2585,14 +3059,26 @@ __zentralShim.register = function (def) {
       (restore && restore !== nothing ? " \u00b7 " + restore : "");
   }
   function boostWidgetResultText(result, language) {
-    const r = result && typeof result === "object" ? result : {};
-    if (r.unloaded && (r.unloaded.tabs || r.unloaded.panels)) {
-      return boostWidgetText(language, "card.deepResult", {
-        tabs: boostWidgetNumber(r.unloaded.tabs, 0), panels: boostWidgetNumber(r.unloaded.panels, 0),
-        mb: boostWidgetNumber(r.freedMB, 0),
-      });
+    const withSkipped = (line) => {
+      const count = boostWidgetSkippedCount(result);
+      return count ? line + boostWidgetText(language, "card.resultSkipped", { count }) : line;
+    };
+    if (!result || typeof result !== "object")
+      return withSkipped(boostWidgetText(language, "card.unknown"));
+    if (result.by === "level2" && result.unloaded) {
+      const tabs = boostWidgetNumber(result.unloaded.tabs, 0);
+      const panels = boostWidgetNumber(result.unloaded.panels, 0);
+      if (tabs || panels)
+        return withSkipped(boostWidgetText(language, "card.deepResult", {
+          tabs, panels, mb: boostWidgetNumber(result.freedMB, 0),
+        }));
     }
-    return boostWidgetText(language, "card.result", { mb: boostWidgetNumber(r.freedMB, 0) });
+    const freed = Number(result.freedMB);
+    if (result.freedMB == null || !Number.isFinite(freed))
+      return withSkipped(boostWidgetText(language, "card.unknown"));
+    if (freed <= 0)
+      return withSkipped(boostWidgetText(language, "card.nothingFreed"));
+    return withSkipped(boostWidgetText(language, "card.result", { mb: Math.round(freed) }));
   }
   // B5/OW-92: the limiter's own numbers. Two cadences, both one-shot chains: a slow idle check and a faster one while
   // above 70 % of the limit. Nothing here is an interval.
@@ -2643,7 +3129,7 @@ __zentralShim.register = function (def) {
   }
 
   (function () {
-    function start() {
+    function start({ lifecycle, runtime: hostRuntime } = {}) {
       if (window.ZentralBoost) return window.ZentralBoost.destroy;
 
       /* ---------------- preferences (read live, never cached at startup) ---------------- */
@@ -2681,6 +3167,19 @@ __zentralShim.register = function (def) {
           return false;
         }
       };
+      // W5: migrate the retired Widgets toggle without deleting it. A user value on the new Boost-owned pref always
+      // wins (including explicit false); otherwise a saved legacy boolean is copied once into the new pref.
+      const migrateWidgetEnabled = () => {
+        try {
+          if (prefHasUserValue(PREF.WIDGET_ENABLED)) return;
+          if (!prefHasUserValue(PREF.LEGACY_WIDGET_ENABLED)) return;
+          Services.prefs.setBoolPref(
+            PREF.WIDGET_ENABLED,
+            prefBool(PREF.LEGACY_WIDGET_ENABLED, true),
+          );
+        } catch (_) {}
+      };
+      migrateWidgetEnabled();
       const mayUnloadPinned = () => {
         if (prefHasUserValue(PREF.UNLOAD_PINNED)) return prefBool(PREF.UNLOAD_PINNED, false);
         return prefBool(PREF.LEGACY_KEEP_PINNED, false) || prefBool(PREF.UNLOAD_PINNED, false);
@@ -5388,6 +5887,78 @@ __zentralShim.register = function (def) {
       }
 
       window.ZentralBoost = api;
+      // W3 shares one mount adapter in standalone and the full pack; both use a
+      // safe in-flow anchor first and retain the hover-card fallback if none exists.
+      const widgetRuntime = hostRuntime || ZentralRuntime || window.__zentralStandaloneRuntime;
+      if (typeof window.__zentralBoostWidgetModule?.mount === "function" &&
+          prefBool(PREF.ENABLED, true)) {
+        const widgetAdapter = {
+          window,
+          document: window.document,
+          chooseBottomMount: window.__zentralSidebarMount?.chooseBottomMount,
+          getSidebarRect: () => widgetRuntime?.nativeSidebarRect?.() || null,
+          createSidebarHoverCard: (options) => widgetRuntime?.createSidebarHoverCard?.(options),
+          registerHostUnload: (callback) => widgetRuntime?.registerHostUnload?.(callback),
+          observeEnabledChange: (callback) => {
+            const releases = [];
+            for (const pref of [PREF.ENABLED, PREF.WIDGET_ENABLED]) {
+              if (typeof lifecycle?.preference === "function") {
+                const release = lifecycle.preference(pref, callback);
+                if (typeof release === "function") releases.push(release);
+                continue;
+              }
+              const observer = {
+                observe(_subject, _topic, data) {
+                  if (!data || data === pref) callback();
+                },
+              };
+              try {
+                Services.prefs.addObserver(pref, observer);
+                releases.push(() => Services.prefs.removeObserver(pref, observer));
+              } catch (_) {}
+            }
+            let active = true;
+            return () => {
+              if (!active) return;
+              active = false;
+              for (const release of releases.splice(0).reverse()) {
+                try { release(); } catch (_) {}
+              }
+            };
+          },
+          setTimeout: (callback, delay) => lifecycle?.setTimeout
+            ? lifecycle.setTimeout(callback, delay)
+            : setTimer(callback, delay),
+          clearTimeout: (id) => lifecycle?.clearTimeout
+            ? lifecycle.clearTimeout(id)
+            : clearTimer(id),
+          own: (dispose) => {
+            if (typeof lifecycle?.own === "function") return lifecycle.own(dispose);
+            let active = true;
+            onCleanup(() => { if (active) { active = false; dispose(); } });
+            return () => { if (active) { active = false; dispose(); } };
+          },
+          listen: (target, type, callback, options) => {
+            if (typeof lifecycle?.listen === "function") return lifecycle.listen(target, type, callback, options);
+            target.addEventListener(type, callback, options);
+            return () => target.removeEventListener(type, callback, options);
+          },
+        };
+        try {
+          const stopWidget = window.__zentralBoostWidgetModule.mount({
+            window,
+            document: window.document,
+            runtime: widgetRuntime,
+            lifecycle,
+            adapter: widgetAdapter,
+            api,
+            isEnabled: () => prefBool(PREF.ENABLED, true) && prefBool(PREF.WIDGET_ENABLED, true),
+          });
+          if (typeof stopWidget === "function") onCleanup(stopWidget);
+        } catch (error) {
+          warn("Boost widget failed to initialize: " + String(error));
+        }
+      }
       const onWindowUnload = () => api.destroy();
       window.addEventListener("unload", onWindowUnload, { once: true });
       onCleanup(() => {

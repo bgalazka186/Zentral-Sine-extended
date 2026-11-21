@@ -15,14 +15,11 @@ const MB = 1_000_000; // Firefox ProcInfo.memory is bytes; fixtures are written 
  *      `runLevel2()` preserves `lastSampleMB` when `afterMB` is null, and `window` `unload` / trim listeners clean up;
  *   6. `limiterRunHard()` stops if disabled or destroyed mid-run;
  *   7. Async `ChromeUtils.requestProcInfo()` returning a Promise does not permanently disable the RAM meter;
- *   8. Boost widget card wires `startSampling`/`stopSampling` on popup open/close, cleans up document listeners on
- *      card `dispose()`, and subscribes lazily if `ZentralBoost` initializes after `ZentralWidgets`.
  */
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
-const { createFakeSidebarHarness } = require("./helpers/fake-widgets-harness.cjs");
 
 const REPO = path.resolve(__dirname, "..");
 const read = (rel) => fs.readFileSync(path.join(REPO, rel), "utf8");
@@ -346,74 +343,6 @@ test("async ChromeUtils.requestProcInfo() Promise populates readings instead of 
   assert.equal(h.api.state().memorySupport, true, "Promise-based requestProcInfo is supported");
   assert.equal(h.api.lastMB(), 800, "resolved parent + child MB is recorded");
   h.api.destroy();
-});
-
-test("Boost widget card toggles sampling with the popup and cleans up listeners on dispose()", async () => {
-  const h = createFakeSidebarHarness({
-    "zen.workspace.zentral.widgets.enabled": true,
-    "zen.workspace.zentral.widgets.clock.enabled": false,
-    "zen.workspace.zentral.widgets.date.enabled": false,
-    "zen.workspace.zentral.widgets.weather.enabled": false,
-    "zen.workspace.zentral.widgets.boost.enabled": true,
-  });
-  let sampling = 0;
-  let unsubs = 0;
-  const listeners = new Set();
-  const boost = {
-    lastMB: () => 500,
-    runLevel1: async () => ({ beforeMB: 500, afterMB: 450, freedMB: 50, by: "minimize" }),
-    onChange: (fn) => {
-      listeners.add(fn);
-      return () => { listeners.delete(fn); unsubs += 1; };
-    },
-    startSampling: () => { sampling += 1; },
-    stopSampling: () => { sampling = Math.max(0, sampling - 1); },
-  };
-  h.window.ZentralBoost = boost;
-  const { api } = h.start();
-  await new Promise((r) => setTimeout(r, 40));
-
-  const card = api.getTray().children.find((el) => el.getAttribute("data-zw-widget") === "boost");
-  const body = card.querySelector(".zw-boost");
-  const arrow = body.querySelector(".zw-boost-menu-btn");
-  const beforeCardListeners = h.counts().docListeners;
-  for (const [t, fn] of arrow._listeners) if (t === "click") fn({ preventDefault() {}, stopPropagation() {} });
-  assert.equal(sampling, 1, "opening Boost popup starts 2s sampling");
-
-  // Disable just the boost card (calls card dispose() without destroying whole shell)
-  h.Services.prefs.setBoolPref("zen.workspace.zentral.widgets.boost.enabled", false);
-  await new Promise((r) => setTimeout(r, 30));
-  assert.equal(sampling, 0, "disposing the card stops sampling if popup was open");
-  assert.equal(unsubs, 1, "disposing the card unsubscribes onChange");
-  assert.equal(h.counts().docListeners, beforeCardListeners - 2, "card pointerdown + keydown listeners are removed on dispose");
-  api.destroy();
-});
-
-test("Boost widget card lazily attaches if ZentralBoost registers after ZentralWidgets", async () => {
-  const h = createFakeSidebarHarness({
-    "zen.workspace.zentral.widgets.enabled": true,
-    "zen.workspace.zentral.widgets.clock.enabled": false,
-    "zen.workspace.zentral.widgets.date.enabled": false,
-    "zen.workspace.zentral.widgets.weather.enabled": false,
-    "zen.workspace.zentral.widgets.boost.enabled": true,
-  });
-  const { api } = h.start();
-  await new Promise((r) => setTimeout(r, 30));
-  const card = api.getTray().children.find((el) => el.getAttribute("data-zw-widget") === "boost");
-  const valueEl = card.querySelector(".zw-boost-value");
-  assert.equal(valueEl.textContent, "\u2014");
-
-  const listeners = new Set();
-  h.window.ZentralBoost = {
-    lastMB: () => 777,
-    runLevel1: async () => null,
-    onChange: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
-  };
-  const arrow = card.querySelector(".zw-boost-menu-btn");
-  arrow.click();
-  await new Promise((r) => setTimeout(r, 20));
-  assert.equal(valueEl.textContent, "777 MB", "card picks up late-initialized ZentralBoost");
-  api.destroy();
 });
 
 test("runLevel2 preserves lastSampleMB when afterMB is null and startup trim detaches input listeners", async () => {

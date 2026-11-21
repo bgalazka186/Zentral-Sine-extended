@@ -7,11 +7,11 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+const { createFakeStandaloneBoostHarness } = require("./helpers/fake-standalone-boost-harness.cjs");
 
 const REPO = path.resolve(__dirname, "..");
 const read = (rel) => fs.readFileSync(path.join(REPO, rel), "utf8");
 const BOOST_SRC = read("additional/boost/ZentralBoost.uc.js");
-const WIDGETS_SRC = read("additional/widgets/ZentralWidgets.uc.js");
 const MB = 1_000_000;
 
 let passed = 0;
@@ -82,34 +82,23 @@ function boot({ procs = [{ memory: 100 * MB, children: [{ memory: 50 * MB }, { m
   return { win, api, warnings, destroy };
 }
 
-function loadWidgetCore() {
-  const seam = {};
-  const Services = { prefs: { getBoolPref: (_k, d) => d, getIntPref: (_k, d) => d, getStringPref: (_k, d) => d }, obs: { addObserver() {}, removeObserver() {} } };
-  const win = { __zentralWidgetsTestSeam: seam, ZentralRuntime: { register() {} } };
-  win.window = win;
-  vm.runInNewContext(WIDGETS_SRC, {
-    window: win, globalThis: { ...win, Services, ChromeUtils: { importESModule: () => ({ Services }) } },
-    ChromeUtils: { importESModule: () => ({ Services }) }, URL, Date, JSON, Math, Promise, RegExp, Number, String,
-    Boolean, Array, Object, Map, Set, WeakMap, Intl, Symbol, Error, TypeError, console, setTimeout, clearTimeout,
-    navigator: { platform: "Linux" },
-  });
-  return seam.core;
-}
-
-test("a realistic byte reading is converted once to MB and formats as a few GB, not millions of GB", () => {
-  const core = loadWidgetCore();
-  const h = boot({ procs: [
-    { memory: 3_000_000_000, children: [{ memory: 202_756_600 }] },
-    { memory: 3_000_000_000, children: [{ memory: 202_756_600 }] },
-  ] });
-  const mb = h.api.memoryMB();
-  assert.equal(mb, 3203, "3,202,756,600 bytes is 3203 MB");
-  // `core` comes from a VM realm: cross-realm prototypes make deepStrictEqual reject an equal
-  // plain object, so compare JSON primitives (the same rule as the OW-115/T4.3c suites).
-  const plain = (value) => JSON.parse(JSON.stringify(value));
-  assert.deepEqual(plain(core.boostParts(mb)), { mb: 3203, text: "3.2 GB", level: "ok" });
-  assert.equal(plain(core.boostParts(mb)).text.includes("3202756"), false, "the old 3202756,6 GB reading is gone");
-  h.destroy();
+test("a realistic byte reading is converted once to MB and the Boost-owned card formats a few GB", async () => {
+  const h = await createFakeStandaloneBoostHarness({
+    instrumentApi: null,
+    procInfo: { memory: 3_000_000_000, children: [{ memory: 202_756_600 }] },
+  }).boot();
+  try {
+    const mb = h.api().memoryMB();
+    assert.equal(mb, 3203, "3,202,756,600 bytes is 3203 MB");
+    const value = h.card()?.querySelector(".zbw-value");
+    assert.ok(value, "the Boost-owned widget displays the converted reading");
+    assert.equal(value.textContent, "3.2 GB");
+    assert.equal(value.getAttribute("data-zbw-level"), "ok");
+    assert.equal(h.card().getAttribute("data-zbw-value"), "3203");
+    assert.equal(value.textContent.includes("3202756"), false, "the old 3202756,6 GB reading is gone");
+  } finally {
+    h.destroy();
+  }
 });
 
 test("parent and child byte values are summed before conversion, and a malformed report is still null", () => {

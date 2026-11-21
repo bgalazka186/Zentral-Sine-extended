@@ -13,67 +13,69 @@ const vm = require("node:vm");
 
 const REPO = path.resolve(__dirname, "..");
 const read = (p) => fs.readFileSync(path.join(REPO, p), "utf8");
-const WIDGET_SRC = read("additional/widgets/ZentralWidgets.uc.js");
 const POLICY_SRC = read("loader/ZentralTabPolicy.js");
 const BOOST_SRC = read("additional/boost/ZentralBoost.uc.js");
-const SETTINGS = JSON.parse(read("additional/widgets/settings.json"));
+const BOOST_SETTINGS = JSON.parse(read("additional/boost/settings.json"));
 
 let passed = 0;
 const tests = [];
 const test = (name, fn) => tests.push([name, fn]);
 
-/* ---------------- widget core, through its own test seam ---------------- */
+/* ---------------- Boost-owned widget helpers ---------------- */
 
-function loadWidgetCore() {
-  const seam = {};
-  const win = { __zentralWidgetsTestSeam: seam, ZentralRuntime: { register() {} } };
-  win.window = win;
-  vm.runInNewContext(WIDGET_SRC, {
-    window: win, globalThis: { Services: {} }, URL, Date, JSON, Math, Promise, RegExp, Number, String, Array,
-    Object, Map, Set, console,
-  });
-  return seam.core;
-}
-const c = loadWidgetCore();
-
-test("the grouped reason line is pure, counted, sorted and localized", () => {
-  assert.equal(typeof c.boostSkippedLine, "function", "the pure formatter is exported");
-  assert.equal(c.boostSkippedLine({ "audible": 2, "pinned-kept": 12, "pending": 1 }),
-    "pinned-kept: 12 \u00b7 audible: 2 \u00b7 pending: 1");
-  assert.equal(c.boostSkippedLine({ "audible": 0, "pinned-kept": "junk" }), "", "junk is ignored");
-  assert.equal(c.boostSkippedLine(null), "");
-  // Both languages have their own words, and the tooltip is built from them.
-  for (const lang of ["en", "pl"]) {
-    assert.ok(c.WIDGET_STRINGS[lang]["boost.skipped"], lang + " has the skipped template");
-    assert.ok(c.WIDGET_STRINGS[lang]["boost.loaded"], lang + " has the loaded-tabs template");
+test("the Boost-owned skipped-reason formatter is pure, counted, sorted and localized", () => {
+  const h = bootBoost([]);
+  try {
+    const api = h.api;
+    assert.equal(typeof api.widgetMenu, "function", "Boost exports its pure card menu helper");
+    const reasons = { audible: 2, "pinned-kept": 12, pending: 1 };
+    const sorted = "pinned-kept: 12 · audible: 2 · pending: 1";
+    for (const language of ["en", "pl"]) {
+      const row = api.widgetMenu({ running: false, canDeep: true, skipped: reasons, language })
+        .find((item) => item.id === "deep-skipped");
+      assert.ok(row, language + " exposes a skipped-reason explanation");
+      assert.equal(row.label, api.widgetText(language, "card.skipped", { reasons: sorted }));
+      assert.ok(api.BOOST_WIDGET_STRINGS[language]["card.loaded"], language + " has the loaded-tabs template");
+    }
+    assert.notEqual(api.BOOST_WIDGET_STRINGS.pl["card.skipped"], api.BOOST_WIDGET_STRINGS.en["card.skipped"]);
+    assert.notEqual(api.BOOST_WIDGET_STRINGS.pl["card.loaded"], api.BOOST_WIDGET_STRINGS.en["card.loaded"]);
+    const junk = api.widgetMenu({ skipped: { audible: 0, "pinned-kept": "junk" } });
+    assert.equal(junk.find((item) => item.id === "deep-skipped"), undefined, "zero and invalid counts are ignored");
+    const none = api.widgetMenu({ skipped: null });
+    assert.equal(none.find((item) => item.id === "deep-skipped"), undefined);
+  } finally {
+    h.destroy();
   }
-  assert.notEqual(c.WIDGET_STRINGS.pl["boost.skipped"], c.WIDGET_STRINGS.en["boost.skipped"]);
-  assert.notEqual(c.WIDGET_STRINGS.pl["boost.loaded"], c.WIDGET_STRINGS.en["boost.loaded"]);
 });
 
-test("the Boost menu data shows the grouped reasons and loaded-tab counts in both languages", () => {
-  const skipped = { "pinned-kept": 12, "audible": 2 };
-  const loadedTabs = { pinned: 12, unpinned: 7 };
-  const en = c.boostMenuItems({ running: false, canDeep: true, skipped, loadedTabs });
-  const row = en.find((x) => x.id === "deep-skipped");
-  assert.ok(row, "disabled explanation data appears after a deep pass with skips");
-  assert.equal(row.available, false, "it is information, not another action");
-  assert.equal(row.label, c.WIDGET_STRINGS.en["boost.skipped"].replace("{reasons}", "pinned-kept: 12 \u00b7 audible: 2"));
-  assert.equal(row.hint, c.WIDGET_STRINGS.en["boost.loaded"].replace("{pinned}", "12").replace("{unpinned}", "7"));
-  const pl = c.boostMenuItems({ running: false, canDeep: true, skipped, loadedTabs, language: "pl" });
-  const plRow = pl.find((x) => x.id === "deep-skipped");
-  assert.equal(plRow.label, c.WIDGET_STRINGS.pl["boost.skipped"].replace("{reasons}", "pinned-kept: 12 \u00b7 audible: 2"));
-  assert.equal(plRow.hint, c.WIDGET_STRINGS.pl["boost.loaded"].replace("{pinned}", "12").replace("{unpinned}", "7"));
-  // No skipped data: the old four-item menu is unchanged (every older test still passes).
-  const plain = c.boostMenuItems({ running: false, canDeep: true });
-  assert.deepEqual(JSON.parse(JSON.stringify(plain.map((x) => x.id))), ["free-light", "free-deep", "game-mode", "restore"]);
-  assert.equal(plain.find((x) => x.id === "deep-skipped"), undefined);
+test("the Boost card menu shows grouped reasons and loaded-tab counts in both languages", () => {
+  const h = bootBoost([]);
+  try {
+    const api = h.api;
+    const skipped = { "pinned-kept": 12, audible: 2 };
+    const loadedTabs = { pinned: 12, unpinned: 7 };
+    const en = api.widgetMenu({ running: false, canDeep: true, skipped, loadedTabs });
+    const row = en.find((x) => x.id === "deep-skipped");
+    assert.ok(row, "disabled explanation data appears after a deep pass with skips");
+    assert.equal(row.available, false, "it is information, not another action");
+    assert.equal(row.label, api.widgetText("en", "card.skipped", { reasons: "pinned-kept: 12 · audible: 2" }));
+    assert.equal(row.hint, api.widgetText("en", "card.loaded", loadedTabs));
+    const pl = api.widgetMenu({ running: false, canDeep: true, skipped, loadedTabs, language: "pl" });
+    const plRow = pl.find((x) => x.id === "deep-skipped");
+    assert.equal(plRow.label, api.widgetText("pl", "card.skipped", { reasons: "pinned-kept: 12 · audible: 2" }));
+    assert.equal(plRow.hint, api.widgetText("pl", "card.loaded", loadedTabs));
+    // No skipped data: the four visible actions are unchanged.
+    const plain = api.widgetMenu({ running: false, canDeep: true });
+    assert.deepEqual(JSON.parse(JSON.stringify(plain.map((x) => x.id))), ["free-light", "free-deep", "game-mode", "restore"]);
+    assert.equal(plain.find((x) => x.id === "deep-skipped"), undefined);
+  } finally {
+    h.destroy();
+  }
 });
 
 test("F5 adds no pref and no setting", () => {
-  assert.equal(/zen\.workspace\.zentral\.boost\.(?:skipped|loaded)/.test(WIDGET_SRC), false);
   assert.equal(/zen\.workspace\.zentral\.boost\.(?:skipped|loaded)/.test(BOOST_SRC), false);
-  assert.equal(SETTINGS.schema.some((x) => /boost\.(skipped|loaded)/.test(x.property)), false);
+  assert.equal(BOOST_SETTINGS.schema.some((x) => /boost\.(skipped|loaded)/.test(x.property)), false);
 });
 
 /* ---------------- Boost state and the real deep pass ---------------- */

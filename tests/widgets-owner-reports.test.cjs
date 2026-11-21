@@ -137,20 +137,17 @@ const BASE = {
     api.destroy();
   });
 
-  // ---- OW-70, as it stands after OW-90 ---------------------------------------------------------------
-  // The Status card and its readings are gone: Boost owns the one memory number the browser can really report, and
-  // `additional/boost/` owns the reading itself. What survives from OW-70 here is the card's own placement rule — a
-  // widget that is switched off keeps its place for when it comes back — asserted in the OW-71 block below.
+  // ---- OW-70 retired Status behavior; generic order handling remains a Widgets-shell concern -----------------
   await test("OW-71: the stored order keeps what exists, drops what does not, and never loses a widget", () => {
     const c = createFakeSidebarHarness().core;
-    const defs = [{ id: "clock" }, { id: "date" }, { id: "weather" }, { id: "boost" }];
-    assert.deepEqual(Array.from(c.orderedByIds(defs, ["boost", "clock"]), (d) => d.id), ["boost", "clock", "date", "weather"],
+    const defs = [{ id: "clock" }, { id: "date" }, { id: "weather" }];
+    assert.deepEqual(Array.from(c.orderedByIds(defs, ["weather", "clock"]), (d) => d.id), ["weather", "clock", "date"],
       "the chosen two first, the rest in their default order — a new widget appears, it is not hidden");
-    assert.deepEqual(Array.from(c.orderedByIds(defs, ["nope", "weather"]), (d) => d.id), ["weather", "clock", "date", "boost"],
+    assert.deepEqual(Array.from(c.orderedByIds(defs, ["nope", "date"]), (d) => d.id), ["date", "clock", "weather"],
       "an id nobody recognises is ignored");
-    assert.deepEqual(Array.from(c.orderedByIds(defs, []), (d) => d.id), ["clock", "date", "weather", "boost"],
+    assert.deepEqual(Array.from(c.orderedByIds(defs, []), (d) => d.id), ["clock", "date", "weather"],
       "no stored order means the default one");
-    assert.deepEqual(Array.from(c.cleanWidgetOrder("clock, ,date;boost clock")), ["clock", "date", "boost"],
+    assert.deepEqual(Array.from(c.cleanWidgetOrder("clock, ,date;weather clock")), ["clock", "date", "weather"],
       "junk, repeats and separators are all handled");
     assert.deepEqual(Array.from(c.cleanWidgetOrder(null)), []);
   });
@@ -170,7 +167,6 @@ const BASE = {
       ...BASE,
       "zen.workspace.zentral.widgets.date.enabled": true,
       "zen.workspace.zentral.widgets.weather.enabled": false,
-      "zen.workspace.zentral.widgets.boost.enabled": false,
     });
     const { api } = h.start();
     await tick(50);

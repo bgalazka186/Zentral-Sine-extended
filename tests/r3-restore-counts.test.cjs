@@ -2,7 +2,7 @@
 /* R3 — honest counts and labels after the holder fix.
  *
  * The Restore label is built from the live snapshot (`gameSession.panels.length` / `gameSession.tabs.length`), so a
- * record freed only as a tab must show up as a TAB in the widget label, in the OFF toast and in
+ * record freed only as a tab must show up as a TAB in the shared Boost-card label, in the OFF toast and in
  * `gameModeState().unloaded`. The old `boost.levelRestore` wording ("wakes sleeping panels; sleeping tabs reload on
  * click") described the broken behaviour and is replaced in both languages.
  */
@@ -16,8 +16,24 @@ const ROOT = path.resolve(__dirname, "..");
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), "utf8");
 const POLICY_SRC = read("loader/ZentralTabPolicy.js");
 const BOOST_SRC = read("additional/boost/ZentralBoost.uc.js");
-const WIDGETS_SRC = read("additional/widgets/ZentralWidgets.uc.js");
-const WIDGETS_BUNDLE = read("additional/widgets/ZentralWidgets.standalone.uc.js");
+const BOOST_WIDGET_HELPERS = (() => {
+  const start = BOOST_SRC.indexOf("  const BOOST_WIDGET_STRINGS = Object.freeze({");
+  const end = BOOST_SRC.indexOf("  // B5/OW-92", start);
+  if (start < 0 || end <= start) throw new Error("Boost-owned card helpers are missing");
+  return new Function(BOOST_SRC.slice(start, end) + `
+    return {
+      strings: BOOST_WIDGET_STRINGS,
+      text: boostWidgetText,
+      menu: boostWidgetMenuItems,
+      preview: boostWidgetPreviewText,
+      restoreLabel: boostWidgetRestoreLabel,
+      feedback: boostWidgetFeedbackText,
+      offText: boostWidgetOffText,
+      resultText: boostWidgetResultText,
+      skippedCount: boostWidgetSkippedCount,
+    };
+  `)();
+})();
 
 let passed = 0;
 const tests = [];
@@ -186,7 +202,7 @@ test("a mixed sleep reports tab-only records as TABS in gameModeState().unloaded
     "arena is a tab, whatsapp is an app");
   assert.deepEqual(state.snapshot, {
     panels: 1, tabs: 1, active: true, hasSelected: false, hasParking: false,
-  }, "the snapshot the widget reads has the same counts");
+  }, "the snapshot the shared Boost card reads has the same counts");
   h.api.setGameMode(false);
   await h.flushTimers(0);
   h.destroy();
@@ -224,7 +240,7 @@ test("the pre-ON preview counts by holder, and agrees with what Game Mode then f
   assert.match(BOOST_SRC, /counts: \{ tabs: previewTabs, panels: previewPanels \}/);
 });
 
-test("the Restore label reads the live snapshot counts, so a tab-only record is a tab", async () => {
+test("the Boost-owned Restore label reads live snapshot counts, so a tab-only record is a tab", async () => {
   const selected = makeTab({ url: "https://selected.example/", label: "selected" });
   const tabOnly = record("arena", { tabLoaded: true, panel: false });
   const panelOnly = record("whatsapp", { tabLoaded: false, panel: true });
@@ -236,41 +252,24 @@ test("the Restore label reads the live snapshot counts, so a tab-only record is 
   await h.flushTimers(0);
   h.destroy();
 
-  // The Widgets core owns the EN/PL label; it must render exactly these numbers with no hidden "apps" inflation.
-  assert.match(WIDGETS_SRC, /"boost\.restoreSnapshot": "Restore \(\{panels\} apps, \{tabs\} tabs\)"/);
-  assert.match(WIDGETS_SRC, /"boost\.restoreSnapshot": "Przywr\\u00f3\\u0107 \(\{panels\} aplikacji, \{tabs\} kart\)"/);
-  assert.match(WIDGETS_BUNDLE, /"boost\.restoreSnapshot": "Restore \(\{panels\} apps, \{tabs\} tabs\)"/);
   assert.deepEqual(snapshot, { panels: 1, tabs: 1, active: true, hasSelected: false, hasParking: false });
-  assert.match(WIDGETS_SRC, /const restoreLabel = snapshot\n\s+\? \(snapshot\.total \? widgetText\(lang, "boost\.restoreSnapshot", \{ panels: snapshot\.panels, tabs: snapshot\.tabs \}\)/);
+  assert.equal(BOOST_WIDGET_HELPERS.restoreLabel(snapshot, "en"), "Restore (1 apps, 1 tabs)");
+  assert.equal(BOOST_WIDGET_HELPERS.restoreLabel(snapshot, "pl"), "Przywróć (1 aplikacji, 1 kart)");
 });
 
-test("the OFF toast uses the same snapshot counts in EN and PL", async () => {
-  const h = bootBoost();
+test("the Boost-owned OFF toast uses the same snapshot counts in EN and PL", () => {
   const snapshot = { panels: 1, tabs: 2 };
-  const en = h.api.widgetOffText ? h.api.widgetOffText(snapshot, "en") : null;
-  const pl = h.api.widgetOffText ? h.api.widgetOffText(snapshot, "pl") : null;
-  h.destroy();
-  if (en != null) {
-    assert.match(en, /Restore \(1 apps, 2 tabs\)/);
-    assert.match(pl, /Przywróć \(1 aplikacji, 2 kart\)/);
-  } else {
-    // The Boost-owned helper is the single source; assert it exists and is event-driven, never a second path.
-    assert.match(BOOST_SRC, /function boostWidgetOffText\(/);
-  }
-  assert.match(WIDGETS_SRC, /"boost\.gameFeedbackOff": "Game Mode off"/);
-  assert.match(WIDGETS_SRC, /"boost\.gameFeedbackOff": "Tryb gry wy\\u0142\\u0105czony"/);
+  assert.equal(BOOST_WIDGET_HELPERS.offText(snapshot, "en"), "Game Mode off · Restore (1 apps, 2 tabs)");
+  assert.equal(BOOST_WIDGET_HELPERS.offText(snapshot, "pl"), "Tryb gry wyłączony · Przywróć (1 aplikacji, 2 kart)");
+  assert.equal(BOOST_WIDGET_HELPERS.offText({ panels: 0, tabs: 0 }, "en"), "Game Mode off");
 });
 
-test("boost.levelRestore describes the real behaviour in both languages", () => {
-  assert.match(WIDGETS_SRC, /"boost\.levelRestore": "Restore: reloads what was unloaded - panels as panels, tabs as tabs\."/);
-  assert.match(WIDGETS_SRC, /"boost\.levelRestore": "Przywróć: wczytuje to, co zostało uśpione \\u2014 panele jako panele, karty jako karty\."/);
-  assert.doesNotMatch(WIDGETS_SRC, /wakes sleeping panels; sleeping tabs reload on click/);
-  assert.doesNotMatch(WIDGETS_SRC, /budzi uśpione panele; karty wczytują się po kliknięciu/);
-  assert.match(WIDGETS_BUNDLE, /"boost\.levelRestore": "Restore: reloads what was unloaded/);
-  assert.match(WIDGETS_SRC, /"boost\.later": "Boost levels: Light, Deep, Game Mode and Restore"/);
-  assert.match(WIDGETS_SRC, /"boost\.later": "Poziomy Boost: Lekko, Głęboko, Tryb gry i Przywróć"/);
-  assert.match(WIDGETS_SRC, /"boost\.levels": "Boost levels and Restore"/);
-  assert.match(WIDGETS_SRC, /"boost\.levels": "Poziomy Boost i Przywróć"/);
+test("Boost-owned descriptions explain Restore in both languages", () => {
+  assert.equal(BOOST_WIDGET_HELPERS.strings.en["card.restoreHint"],
+    "Restore: reloads what was unloaded — panels as panels, tabs as tabs.");
+  assert.equal(BOOST_WIDGET_HELPERS.strings.pl["card.restoreHint"],
+    "Przywróć: wczytuje to, co zostało uśpione — panele jako panele, karty jako karty.");
+  assert.notEqual(BOOST_WIDGET_HELPERS.strings.pl["card.restoreHint"], BOOST_WIDGET_HELPERS.strings.en["card.restoreHint"]);
 });
 
 test("the Boost README documents the holders table and the panels-profile rule", () => {

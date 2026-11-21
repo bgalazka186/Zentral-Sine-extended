@@ -235,9 +235,6 @@
           "label": "Weather"
         },
         {
-          "label": "Boost"
-        },
-        {
           "label": "Appearance"
         },
         {
@@ -1025,12 +1022,6 @@
     "zen.workspace.zentral.widgets.weather.places",
     "zen.workspace.zentral.widgets.weather.default_view",
     "zen.workspace.zentral.widgets.weather.refresh_minutes",
-    {
-      "type": "text",
-      "label": "**Sidebar Widgets · Boost**",
-      "size": "16px"
-    },
-    "zen.workspace.zentral.widgets.boost.enabled",
     {
       "type": "text",
       "label": "**Sidebar Widgets · Appearance**",

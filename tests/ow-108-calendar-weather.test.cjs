@@ -69,7 +69,6 @@ const PREF_CAL_MONTH = "zen.workspace.zentral.notes.calendar_weather_month";
       [PREF_REFRESH]: 30,
       "zen.workspace.zentral.widgets.clock.enabled": false,
       "zen.workspace.zentral.widgets.date.enabled": false,
-      "zen.workspace.zentral.widgets.boost.enabled": false,
     },
     {
       fetch(url) {
@@ -341,7 +340,6 @@ const PREF_CAL_MONTH = "zen.workspace.zentral.notes.calendar_weather_month";
       [PREF_PLACES]: JSON.stringify([{ id: "opole", name: "Opole", latitude: 50.67, longitude: 17.92 }]),
       "zen.workspace.zentral.widgets.clock.enabled": false,
       "zen.workspace.zentral.widgets.date.enabled": false,
-      "zen.workspace.zentral.widgets.boost.enabled": false,
     },
     {
       fetch: () => Promise.reject(new Error("offline")),

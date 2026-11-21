@@ -227,3 +227,1247 @@ See `CHECKPOINT-P3.md` (repo root) for the full continuation guide. Summary:
 - Cheap scan finished: only confirmed bug was the untracked 3 s "Empty trash" confirm timer (now `emptyTimer`, cleared on destroy). Gestures (`cancelGesture` on close/suspend), hold buttons, rAF and `close()`/`destroy()` reserve release checked by reading; no change needed. Guard: `tests/notes-p3-scan.test.cjs`.
 - `TODO_notes_roadmap.md` marked: done items DONE, Node-only ones "CODE DONE", open ones listed (hub notes, footnotes, unlinked mentions, date notes, version history, E-a..E-c blocked, E-d, R5, E2).
 - Part A stays blocked; P3 is not fully DONE until the live checklist in `CHECKPOINT-P3.md` passes.
+
+## Boost-widget follow-up W1 — inventory (2026-11-21, read-only)
+
+Exact requested scan: `grep -rn 'boost\|Boost' additional/widgets extension/settings tests loader | grep -v standalone` (1,157 hit lines). Each hit is transcribed below with its original W1 disposition: `DELETE` = remove Widgets-only coupling, `MOVE` = move the widget behavior/string/style/test to Boost, `KEEP` = generic Widgets/loader/Boost-engine behavior retained. These were inventory classifications; W4 has now been implemented, and the actual file/test outcomes are reconciled in **Boost-widget follow-up W4 — remove the duplicate card from Widgets** below. The exact grep filter also excludes any matching line whose text contains “standalone”; `tests/boost-standalone-widget.test.cjs` is separately classified there and is not one of the 1,157 ledger rows.
+
+Final W4 suite disposition: `widgets-boost-card.test.cjs` and `widgets-status.test.cjs` are deleted as obsolete Widgets-owned Boost suites; Boost card behavior is covered by `boost-standalone-widget`, `ow-121-boost-ux`, G7 and related Boost suites. `ow-121-boost-ux`, `g7-game-mode-feedback`, and `r3-restore-counts` now exercise Boost-owned source/helpers. The Boost-specific `widgets-language` case was removed, leaving generic language coverage. Generic Widgets coverage remains: `widgets-shell`, `widgets-owner-reports`, `widgets-no-dead-drag`, `widgets-clock-date`, `widgets-clock-timer`, and `ow-127-widget-space-priority` (which still passes without Boost as a registered widget). `ow-115-boost-skipped` and `ow-118-boost-procinfo-bytes` were also migrated off the retired Widgets test seam onto Boost's API/shared card. OW-108/109/110 fixture/audit coverage was cleaned of retired Widgets-pref/card assumptions. Other Boost engine/policy/Restore tests, loader references and the Boost settings category remain Boost-owned and retained.
+
+The ledger is the exact scan output with a disposition prefix; line numbers refer to the pre-edit tree at base `314154728ee6c297ccc57e02915d5950d49f41da`.
+
+````text
+DELETE additional/widgets/README.md:25:  - **Boost** (`zen.workspace.zentral.widgets.boost.enabled`, default on, OW-90/OW-121): the browser's RAM and the action that lowers it, in one card. It **replaced the Status card** (battery + memory); the battery half left with it, because a desktop has none and the owner read the old "no battery" line as a broken widget. The card owns no reading and no timer of its own: `additional/boost/` measures, samples every 2 s only while the popup is open, and the card hears every value through `onChange`. A click on the card runs `runLevel1()` and toasts what was freed (4 s, `role="status"`). OW-121 replaces the vertical drop-down list with ONE 26 px row of four 20 px cards — **Light**, **Deep**, **Game**, **Restore** — in the same inline popup (no `z-index`, no overlay). The full labels stay in `aria-label`; deterministic en/pl one-line descriptions are `title` tooltips: Light = GC/CC + minimize, no tabs touched; Deep = light clean first, eligible tabs sleep, Restore available; Game Mode = pauses repeating features and idles non-essential browsers; Restore = wakes sleeping panels. OW-115's grouped skip reasons and loaded-tab counts are folded into the Deep tooltip, not a new row. The existing toast adds ` · skipped N protected tab(s)` after a run with grouped skips. No added height, pref, timer, listener or DOM row. A missing Boost module leaves a dash and a card that does nothing, never an error; the tray's `pause_when_hidden` applies like every other card.
+MOVE   additional/widgets/ZentralWidgets.css:258:/* ---- Built-in Boost widget (OW-90; it replaced the Status card) ----------------------------------------- */
+MOVE   additional/widgets/ZentralWidgets.css:262:#zentral-sidebar-widgets .zw-boost {
+MOVE   additional/widgets/ZentralWidgets.css:273:#zentral-sidebar-widgets .zw-boost-value {
+MOVE   additional/widgets/ZentralWidgets.css:281:#zentral-sidebar-widgets .zw-boost-value[data-zw-level="low"] {
+MOVE   additional/widgets/ZentralWidgets.css:285:#zentral-sidebar-widgets .zw-boost-value[data-zw-level="muted"] {
+MOVE   additional/widgets/ZentralWidgets.css:289:#zentral-sidebar-widgets .zw-boost-label {
+MOVE   additional/widgets/ZentralWidgets.css:294:#zentral-sidebar-widgets .zw-boost-menu-btn {
+MOVE   additional/widgets/ZentralWidgets.css:308:#zentral-sidebar-widgets .zw-boost-menu-btn:hover,
+MOVE   additional/widgets/ZentralWidgets.css:309:#zentral-sidebar-widgets .zw-boost-menu-btn:focus-visible {
+MOVE   additional/widgets/ZentralWidgets.css:315:   and a 1 px border on each side, so adding descriptions/result text never makes the Boost card taller. */
+MOVE   additional/widgets/ZentralWidgets.css:316:#zentral-sidebar-widgets .zw-boost-popup {
+MOVE   additional/widgets/ZentralWidgets.css:338:#zentral-sidebar-widgets .zw-boost-popup[hidden] {
+MOVE   additional/widgets/ZentralWidgets.css:342:#zentral-sidebar-widgets .zw-boost-menu-item {
+MOVE   additional/widgets/ZentralWidgets.css:366:#zentral-sidebar-widgets .zw-boost-menu-item[data-zw-boost-level] {
+MOVE   additional/widgets/ZentralWidgets.css:371:#zentral-sidebar-widgets .zw-boost-menu-item[data-zw-boost-level][aria-checked="true"] {
+MOVE   additional/widgets/ZentralWidgets.css:377:#zentral-sidebar-widgets .zw-boost-menu-item:hover:not([disabled]),
+MOVE   additional/widgets/ZentralWidgets.css:378:#zentral-sidebar-widgets .zw-boost-menu-item:focus-visible:not([disabled]) {
+MOVE   additional/widgets/ZentralWidgets.css:382:#zentral-sidebar-widgets .zw-boost-menu-item[disabled] {
+MOVE   additional/widgets/ZentralWidgets.css:387:#zentral-sidebar-widgets .zw-boost-menu-note {
+DELETE additional/widgets/ZentralWidgets.uc.js:70:    // OW-90: the Status card is gone — Boost replaces it. The memory reading moved into `additional/boost/`, where the
+MOVE   additional/widgets/ZentralWidgets.uc.js:72:    BOOST_ENABLED: "zen.workspace.zentral.widgets.boost.enabled",
+MOVE   additional/widgets/ZentralWidgets.uc.js:135:      "boost.title": "Boost",
+MOVE   additional/widgets/ZentralWidgets.uc.js:136:      "boost.aria": "{value} of browser memory in use. Click to free memory.",
+MOVE   additional/widgets/ZentralWidgets.uc.js:137:      "boost.ariaUnknown": "Browser memory reading unavailable. Click to free memory.",
+MOVE   additional/widgets/ZentralWidgets.uc.js:138:      "boost.free": "Free memory (light)",
+MOVE   additional/widgets/ZentralWidgets.uc.js:139:      "boost.busy": "Freeing memory\u2026",
+MOVE   additional/widgets/ZentralWidgets.uc.js:140:      "boost.freed": "Freed {mb} MB",
+MOVE   additional/widgets/ZentralWidgets.uc.js:141:      "boost.nothingFreed": "Memory was already tidy",
+MOVE   additional/widgets/ZentralWidgets.uc.js:142:      "boost.unknown": "Memory freed. This build cannot measure it.",
+MOVE   additional/widgets/ZentralWidgets.uc.js:143:      "boost.deep": "Free memory (deep)",
+MOVE   additional/widgets/ZentralWidgets.uc.js:144:      "boost.deepSoon": "Needs the shared tab policy",
+MOVE   additional/widgets/ZentralWidgets.uc.js:145:      "boost.deepDone": "Put {tabs} tab(s) and {panels} panel(s) to sleep, freed {mb} MB",
+MOVE   additional/widgets/ZentralWidgets.uc.js:146:      "boost.skipped": "Last deep pass kept: {reasons}",
+MOVE   additional/widgets/ZentralWidgets.uc.js:147:      "boost.loaded": "Loaded tabs: {pinned} pinned, {unpinned} unpinned",
+MOVE   additional/widgets/ZentralWidgets.uc.js:148:      "boost.restoreCount": "Restore ({count})",
+MOVE   additional/widgets/ZentralWidgets.uc.js:149:      "boost.restored": "Woke {count} panel(s)",
+MOVE   additional/widgets/ZentralWidgets.uc.js:150:      "boost.restoredTabs": "{count} sleeping tab(s) ready to reload on click",
+MOVE   additional/widgets/ZentralWidgets.uc.js:151:      "boost.limitHit": "{mb} MB in use, above your {limit} MB limit. Open Boost to free memory.",
+MOVE   additional/widgets/ZentralWidgets.uc.js:152:      "boost.limitDone": "Freed memory down to {mb} MB",
+MOVE   additional/widgets/ZentralWidgets.uc.js:153:      "boost.limitNothing": "Memory is high, but nothing else may be unloaded",
+MOVE   additional/widgets/ZentralWidgets.uc.js:154:      "boost.restore": "Restore",
+MOVE   additional/widgets/ZentralWidgets.uc.js:155:      "boost.restoreSoon": "Nothing to restore yet",
+MOVE   additional/widgets/ZentralWidgets.uc.js:156:      "boost.gameMode": "Game Mode",
+MOVE   additional/widgets/ZentralWidgets.uc.js:157:      "boost.gameModeOn": "Game Mode on \u2014 timers paused, background tabs idle",
+MOVE   additional/widgets/ZentralWidgets.uc.js:158:      "boost.gameModeOff": "Game Mode off \u2014 everything back to normal",
+MOVE   additional/widgets/ZentralWidgets.uc.js:159:      // G7: the preview, the G8 final report and the OFF toast belong to BOTH Boost card owners.
+MOVE   additional/widgets/ZentralWidgets.uc.js:160:      "boost.gamePreview": "Will free about {tabs} tabs and {panels} apps before Game Mode starts",
+MOVE   additional/widgets/ZentralWidgets.uc.js:161:      "boost.gameFeedback": "Game Mode: freed {mb} MB \u00b7 {tabs} tabs, {panels} apps unloaded \u00b7 kept: {kept}",
+MOVE   additional/widgets/ZentralWidgets.uc.js:162:      "boost.gameStarting": "Game Mode: freeing memory\u2026",
+MOVE   additional/widgets/ZentralWidgets.uc.js:163:      "boost.gameFeedbackOff": "Game Mode off",
+MOVE   additional/widgets/ZentralWidgets.uc.js:164:      "boost.keptNone": "none",
+MOVE   additional/widgets/ZentralWidgets.uc.js:165:      "boost.keptMore": "+{count} more",
+MOVE   additional/widgets/ZentralWidgets.uc.js:166:      "boost.gameRestoreAction": "Restore",
+MOVE   additional/widgets/ZentralWidgets.uc.js:167:      "boost.restoreSnapshot": "Restore ({panels} apps, {tabs} tabs)",
+MOVE   additional/widgets/ZentralWidgets.uc.js:168:      "boost.later": "Boost levels: Light, Deep, Game Mode and Restore",
+MOVE   additional/widgets/ZentralWidgets.uc.js:169:      "boost.levels": "Boost levels and Restore",
+MOVE   additional/widgets/ZentralWidgets.uc.js:170:      "boost.shortLight": "Light",
+MOVE   additional/widgets/ZentralWidgets.uc.js:171:      "boost.shortDeep": "Deep",
+MOVE   additional/widgets/ZentralWidgets.uc.js:172:      "boost.shortGame": "Game",
+MOVE   additional/widgets/ZentralWidgets.uc.js:173:      "boost.shortRestore": "Restore",
+MOVE   additional/widgets/ZentralWidgets.uc.js:174:      "boost.levelLight": "Light: GC/CC + memory minimize. No tabs touched.",
+MOVE   additional/widgets/ZentralWidgets.uc.js:175:      "boost.levelDeep": "Deep: Light clean first, then eligible tabs sleep. Restore available.",
+MOVE   additional/widgets/ZentralWidgets.uc.js:176:      "boost.levelGame": "Game Mode: pauses repeating features and idles non-essential browsers.",
+MOVE   additional/widgets/ZentralWidgets.uc.js:177:      "boost.levelRestore": "Restore: reloads what was unloaded - panels as panels, tabs as tabs.",
+MOVE   additional/widgets/ZentralWidgets.uc.js:178:      "boost.resultSkipped": " \u00b7 skipped {count} protected tab(s)",
+MOVE   additional/widgets/ZentralWidgets.uc.js:224:      "boost.title": "Boost",
+MOVE   additional/widgets/ZentralWidgets.uc.js:225:      "boost.aria": "Pami\u0119\u0107 przegl\u0105darki: {value}. Kliknij, aby j\u0105 zwolni\u0107.",
+MOVE   additional/widgets/ZentralWidgets.uc.js:226:      "boost.ariaUnknown": "Odczyt pami\u0119ci niedost\u0119pny. Kliknij, aby zwolni\u0107 pami\u0119\u0107.",
+MOVE   additional/widgets/ZentralWidgets.uc.js:227:      "boost.free": "Zwolnij pami\u0119\u0107 (lekko)",
+MOVE   additional/widgets/ZentralWidgets.uc.js:228:      "boost.busy": "Zwalnianie pami\u0119ci\u2026",
+MOVE   additional/widgets/ZentralWidgets.uc.js:229:      "boost.freed": "Zwolniono {mb} MB",
+MOVE   additional/widgets/ZentralWidgets.uc.js:230:      "boost.nothingFreed": "Pami\u0119\u0107 by\u0142a ju\u017c uporz\u0105dkowana",
+MOVE   additional/widgets/ZentralWidgets.uc.js:231:      "boost.unknown": "Pami\u0119\u0107 zwolniona. Ta wersja nie potrafi jej zmierzy\u0107.",
+MOVE   additional/widgets/ZentralWidgets.uc.js:232:      "boost.deep": "Zwolnij pami\u0119\u0107 (g\u0142\u0119boko)",
+MOVE   additional/widgets/ZentralWidgets.uc.js:233:      "boost.deepSoon": "Wymaga wsp\u00f3lnej polityki kart",
+MOVE   additional/widgets/ZentralWidgets.uc.js:234:      "boost.deepDone": "U\u015bpiono {tabs} kart i {panels} paneli, zwolniono {mb} MB",
+MOVE   additional/widgets/ZentralWidgets.uc.js:235:      "boost.skipped": "Ostatnie g\u0142\u0119bokie czyszczenie zostawi\u0142o: {reasons}",
+MOVE   additional/widgets/ZentralWidgets.uc.js:236:      "boost.loaded": "Wczytane karty: {pinned} przypi\u0119tych, {unpinned} nieprzypi\u0119tych",
+MOVE   additional/widgets/ZentralWidgets.uc.js:237:      "boost.restoreCount": "Przywr\u00f3\u0107 ({count})",
+MOVE   additional/widgets/ZentralWidgets.uc.js:238:      "boost.restored": "Obudzono {count} paneli",
+MOVE   additional/widgets/ZentralWidgets.uc.js:239:      "boost.restoredTabs": "{count} u\u015bpionych kart wczyta si\u0119 po klikni\u0119ciu",
+MOVE   additional/widgets/ZentralWidgets.uc.js:240:      "boost.limitHit": "W u\u017cyciu {mb} MB, powy\u017cej limitu {limit} MB. Otw\u00f3rz Boost, aby zwolni\u0107 pami\u0119\u0107.",
+MOVE   additional/widgets/ZentralWidgets.uc.js:241:      "boost.limitDone": "Zwolniono pami\u0119\u0107 do {mb} MB",
+MOVE   additional/widgets/ZentralWidgets.uc.js:242:      "boost.limitNothing": "Pami\u0119\u0107 jest wysoka, ale nie ma ju\u017c czego zwalnia\u0107",
+MOVE   additional/widgets/ZentralWidgets.uc.js:243:      "boost.restore": "Przywr\u00f3\u0107",
+MOVE   additional/widgets/ZentralWidgets.uc.js:244:      "boost.restoreSoon": "Nie ma jeszcze czego przywraca\u0107",
+MOVE   additional/widgets/ZentralWidgets.uc.js:245:      "boost.gameMode": "Tryb gry",
+MOVE   additional/widgets/ZentralWidgets.uc.js:246:      "boost.gameModeOn": "Tryb gry w\u0142\u0105czony \u2014 liczniki wstrzymane, karty w tle bezczynne",
+MOVE   additional/widgets/ZentralWidgets.uc.js:247:      "boost.gameModeOff": "Tryb gry wy\u0142\u0105czony \u2014 wszystko wraca do normy",
+MOVE   additional/widgets/ZentralWidgets.uc.js:248:      "boost.gamePreview": "U\u015bpi oko\u0142o {tabs} kart i {panels} aplikacji przed w\u0142\u0105czeniem Trybu gry",
+MOVE   additional/widgets/ZentralWidgets.uc.js:249:      "boost.gameFeedback": "Tryb gry: zwolniono {mb} MB \u00b7 {tabs} kart, {panels} aplikacji u\u015bpionych \u00b7 zachowano: {kept}",
+MOVE   additional/widgets/ZentralWidgets.uc.js:250:      "boost.gameStarting": "Tryb gry: zwalnianie pami\u0119ci\u2026",
+MOVE   additional/widgets/ZentralWidgets.uc.js:251:      "boost.gameFeedbackOff": "Tryb gry wy\u0142\u0105czony",
+MOVE   additional/widgets/ZentralWidgets.uc.js:252:      "boost.keptNone": "brak",
+MOVE   additional/widgets/ZentralWidgets.uc.js:253:      "boost.keptMore": "+{count} wi\u0119cej",
+MOVE   additional/widgets/ZentralWidgets.uc.js:254:      "boost.gameRestoreAction": "Przywr\u00f3\u0107",
+MOVE   additional/widgets/ZentralWidgets.uc.js:255:      "boost.restoreSnapshot": "Przywr\u00f3\u0107 ({panels} aplikacji, {tabs} kart)",
+MOVE   additional/widgets/ZentralWidgets.uc.js:256:      "boost.later": "Poziomy Boost: Lekko, Głęboko, Tryb gry i Przywróć",
+MOVE   additional/widgets/ZentralWidgets.uc.js:257:      "boost.levels": "Poziomy Boost i Przywróć",
+MOVE   additional/widgets/ZentralWidgets.uc.js:258:      "boost.shortLight": "Lekko",
+MOVE   additional/widgets/ZentralWidgets.uc.js:259:      "boost.shortDeep": "Głęboko",
+MOVE   additional/widgets/ZentralWidgets.uc.js:260:      "boost.shortGame": "Gra",
+MOVE   additional/widgets/ZentralWidgets.uc.js:261:      "boost.shortRestore": "Przywróć",
+MOVE   additional/widgets/ZentralWidgets.uc.js:262:      "boost.levelLight": "Lekko: GC/CC i minimalizacja pamięci. Karty nie są ruszane.",
+MOVE   additional/widgets/ZentralWidgets.uc.js:263:      "boost.levelDeep": "Głęboko: najpierw lekkie czyszczenie, potem usypianie kart. Dostępne Przywróć.",
+MOVE   additional/widgets/ZentralWidgets.uc.js:264:      "boost.levelGame": "Tryb gry: wstrzymuje cykliczne funkcje i wygasza niepotrzebne karty.",
+MOVE   additional/widgets/ZentralWidgets.uc.js:265:      "boost.levelRestore": "Przywróć: wczytuje to, co zostało uśpione \u2014 panele jako panele, karty jako karty.",
+MOVE   additional/widgets/ZentralWidgets.uc.js:266:      "boost.resultSkipped": " \u00b7 pominięto {count} chronionych kart",
+MOVE   additional/widgets/ZentralWidgets.uc.js:1977:  // ---- OW-90: the Boost card -- ---------------------------------------------------------------------------------
+MOVE   additional/widgets/ZentralWidgets.uc.js:1978:  // Boost is a number and one action. The number comes from `additional/boost/` (the only place that knows how to ask
+MOVE   additional/widgets/ZentralWidgets.uc.js:1984:  function boostParts(mb) {
+MOVE   additional/widgets/ZentralWidgets.uc.js:1995:  function boostSkippedLine(reasons) {
+MOVE   additional/widgets/ZentralWidgets.uc.js:2006:  function boostSkippedCount(result) {
+MOVE   additional/widgets/ZentralWidgets.uc.js:2018:  function resolveBoostClick(opts = {}) {
+MOVE   additional/widgets/ZentralWidgets.uc.js:2027:  function boostMenuItems(opts = {}) {
+MOVE   additional/widgets/ZentralWidgets.uc.js:2037:    const snapshot = opts.snapshot && typeof opts.snapshot === "object" ? boostGameModeSnapshot(opts.snapshot) : null;
+MOVE   additional/widgets/ZentralWidgets.uc.js:2039:      ? (snapshot.total ? widgetText(lang, "boost.restoreSnapshot", { panels: snapshot.panels, tabs: snapshot.tabs })
+MOVE   additional/widgets/ZentralWidgets.uc.js:2040:          : widgetText(lang, "boost.restoreSoon"))
+MOVE   additional/widgets/ZentralWidgets.uc.js:2041:      : undoSize ? widgetText(lang, "boost.restoreCount", { count: undoSize }) : widgetText(lang, "boost.restore");
+MOVE   additional/widgets/ZentralWidgets.uc.js:2044:    const skippedLine = boostSkippedLine(opts.skipped);
+MOVE   additional/widgets/ZentralWidgets.uc.js:2049:        label: widgetText(lang, running ? "boost.busy" : "boost.free"),
+MOVE   additional/widgets/ZentralWidgets.uc.js:2050:        shortLabel: running ? "\u2026" : widgetText(lang, "boost.shortLight"),
+MOVE   additional/widgets/ZentralWidgets.uc.js:2051:        description: widgetText(lang, "boost.levelLight"),
+MOVE   additional/widgets/ZentralWidgets.uc.js:2058:        label: widgetText(lang, "boost.deep"),
+MOVE   additional/widgets/ZentralWidgets.uc.js:2059:        shortLabel: widgetText(lang, "boost.shortDeep"),
+MOVE   additional/widgets/ZentralWidgets.uc.js:2060:        description: widgetText(lang, "boost.levelDeep"),
+MOVE   additional/widgets/ZentralWidgets.uc.js:2063:        hint: canDeep ? "" : widgetText(lang, "boost.deepSoon"),
+MOVE   additional/widgets/ZentralWidgets.uc.js:2069:        label: widgetText(lang, "boost.gameMode"),
+MOVE   additional/widgets/ZentralWidgets.uc.js:2070:        shortLabel: widgetText(lang, "boost.shortGame"),
+MOVE   additional/widgets/ZentralWidgets.uc.js:2071:        description: widgetText(lang, "boost.levelGame"),
+MOVE   additional/widgets/ZentralWidgets.uc.js:2075:        hint: gameOn ? widgetText(lang, "boost.gameModeOn") : "",
+MOVE   additional/widgets/ZentralWidgets.uc.js:2080:        shortLabel: widgetText(lang, "boost.shortRestore"),
+MOVE   additional/widgets/ZentralWidgets.uc.js:2081:        description: widgetText(lang, "boost.levelRestore"),
+MOVE   additional/widgets/ZentralWidgets.uc.js:2083:        hint: !running && (snapshot ? snapshot.total > 0 : undoSize > 0) ? "" : widgetText(lang, "boost.restoreSoon"),
+MOVE   additional/widgets/ZentralWidgets.uc.js:2089:        label: widgetText(lang, "boost.skipped", { reasons: skippedLine }),
+MOVE   additional/widgets/ZentralWidgets.uc.js:2091:        hint: widgetText(lang, "boost.loaded", {
+MOVE   additional/widgets/ZentralWidgets.uc.js:2103:  function boostResultText(result, opts = {}) {
+MOVE   additional/widgets/ZentralWidgets.uc.js:2106:      const count = boostSkippedCount(result);
+MOVE   additional/widgets/ZentralWidgets.uc.js:2107:      return count ? text + widgetText(lang, "boost.resultSkipped", { count }) : text;
+MOVE   additional/widgets/ZentralWidgets.uc.js:2109:    if (!result || typeof result !== "object") return withSkipped(widgetText(lang, "boost.unknown"));
+MOVE   additional/widgets/ZentralWidgets.uc.js:2115:        return withSkipped(widgetText(lang, "boost.deepDone", {
+MOVE   additional/widgets/ZentralWidgets.uc.js:2125:    if (result.freedMB == null || !Number.isFinite(freed)) return withSkipped(widgetText(lang, "boost.unknown"));
+MOVE   additional/widgets/ZentralWidgets.uc.js:2126:    if (freed <= 0) return withSkipped(widgetText(lang, "boost.nothingFreed"));
+MOVE   additional/widgets/ZentralWidgets.uc.js:2127:    return withSkipped(widgetText(lang, "boost.freed", { mb: Math.round(freed) }));
+MOVE   additional/widgets/ZentralWidgets.uc.js:2130:  /* G7: the same pure feedback rules for the full-pack tray. Boost owns the measurement; these functions only
+MOVE   additional/widgets/ZentralWidgets.uc.js:2132:  function boostGameModeNumber(value, fallback = 0) {
+MOVE   additional/widgets/ZentralWidgets.uc.js:2136:  function boostGameModeSnapshot(snapshot) {
+MOVE   additional/widgets/ZentralWidgets.uc.js:2139:      panels: boostGameModeNumber(s.panels, 0),
+MOVE   additional/widgets/ZentralWidgets.uc.js:2140:      tabs: boostGameModeNumber(s.tabs, 0),
+MOVE   additional/widgets/ZentralWidgets.uc.js:2144:  function boostGameModePreviewText(preview, opts = {}) {
+MOVE   additional/widgets/ZentralWidgets.uc.js:2147:    return widgetText(lang, "boost.gamePreview", {
+MOVE   additional/widgets/ZentralWidgets.uc.js:2148:      tabs: boostGameModeNumber(counts.tabs, 0),
+MOVE   additional/widgets/ZentralWidgets.uc.js:2149:      panels: boostGameModeNumber(counts.panels, 0),
+MOVE   additional/widgets/ZentralWidgets.uc.js:2152:  function boostGameModeFeedbackText(state, opts = {}) {
+MOVE   additional/widgets/ZentralWidgets.uc.js:2161:    if (kept.length > 3) names.push(widgetText(lang, "boost.keptMore", { count: kept.length - 3 }));
+MOVE   additional/widgets/ZentralWidgets.uc.js:2162:    return widgetText(lang, "boost.gameFeedback", {
+MOVE   additional/widgets/ZentralWidgets.uc.js:2163:      mb: boostGameModeNumber(s.freedMB ?? s.finalFreedMB, 0),
+MOVE   additional/widgets/ZentralWidgets.uc.js:2164:      tabs: boostGameModeNumber(unloaded.tabs, 0),
+MOVE   additional/widgets/ZentralWidgets.uc.js:2165:      panels: boostGameModeNumber(unloaded.panels, 0),
+MOVE   additional/widgets/ZentralWidgets.uc.js:2166:      kept: names.length ? names.join(", ") : widgetText(lang, "boost.keptNone"),
+MOVE   additional/widgets/ZentralWidgets.uc.js:2169:  function boostRestoreSnapshotLabel(snapshot, opts = {}) {
+MOVE   additional/widgets/ZentralWidgets.uc.js:2171:    const s = boostGameModeSnapshot(snapshot);
+MOVE   additional/widgets/ZentralWidgets.uc.js:2173:      ? widgetText(lang, "boost.restoreSnapshot", { panels: s.panels, tabs: s.tabs })
+MOVE   additional/widgets/ZentralWidgets.uc.js:2174:      : widgetText(lang, "boost.restoreSoon");
+MOVE   additional/widgets/ZentralWidgets.uc.js:2176:  function boostGameModeOffText(snapshot, opts = {}) {
+MOVE   additional/widgets/ZentralWidgets.uc.js:2178:    const label = boostRestoreSnapshotLabel(snapshot, opts);
+MOVE   additional/widgets/ZentralWidgets.uc.js:2179:    const line = widgetText(lang, "boost.gameFeedbackOff");
+MOVE   additional/widgets/ZentralWidgets.uc.js:2180:    return label && label !== widgetText(lang, "boost.restoreSoon") ? line + " \u00b7 " + label : line;
+MOVE   additional/widgets/ZentralWidgets.uc.js:3189:    boostParts,
+MOVE   additional/widgets/ZentralWidgets.uc.js:3190:    resolveBoostClick,
+MOVE   additional/widgets/ZentralWidgets.uc.js:3191:    boostSkippedLine,
+MOVE   additional/widgets/ZentralWidgets.uc.js:3192:    boostSkippedCount,
+MOVE   additional/widgets/ZentralWidgets.uc.js:3193:    boostMenuItems,
+MOVE   additional/widgets/ZentralWidgets.uc.js:3194:    boostResultText,
+MOVE   additional/widgets/ZentralWidgets.uc.js:3195:    boostGameModeNumber,
+MOVE   additional/widgets/ZentralWidgets.uc.js:3196:    boostGameModeSnapshot,
+MOVE   additional/widgets/ZentralWidgets.uc.js:3197:    boostGameModePreviewText,
+MOVE   additional/widgets/ZentralWidgets.uc.js:3198:    boostGameModeFeedbackText,
+MOVE   additional/widgets/ZentralWidgets.uc.js:3199:    boostRestoreSnapshotLabel,
+MOVE   additional/widgets/ZentralWidgets.uc.js:3200:    boostGameModeOffText,
+DELETE additional/widgets/ZentralWidgets.uc.js:3324:      // Widgets tray, the tray appears so it can own that Boost card. An explicit `widgets.enabled=false`
+DELETE additional/widgets/ZentralWidgets.uc.js:3326:      function externalBoostWantsTray() {
+DELETE additional/widgets/ZentralWidgets.uc.js:3327:        const marker = window.__zentralBoostStandaloneWidget;
+DELETE additional/widgets/ZentralWidgets.uc.js:3340:          enabled: getBool(WIDGET_PREFS.ENABLED, false) || externalBoostWantsTray(),
+DELETE additional/widgets/ZentralWidgets.uc.js:4107:      // OW-90: the Status card is replaced by Boost, so a person who had Status switched ON gets Boost switched on.
+DELETE additional/widgets/ZentralWidgets.uc.js:4108:      // A default of `false` for everybody was the Status card's accident (off unless asked); Boost ships on, and this
+DELETE additional/widgets/ZentralWidgets.uc.js:4110:      // Boost off and it never touches a pref somebody already set for Boost.
+DELETE additional/widgets/ZentralWidgets.uc.js:4113:          const def = registry.get("boost");
+DELETE additional/widgets/ZentralWidgets.uc.js:5573:          // OW-90: the plan's own number for the Boost toast is 4 s.
+MOVE   additional/widgets/ZentralWidgets.uc.js:5611:      // ---- OW-90: the Boost card, which replaces the Status card -----------------------------------------------
+MOVE   additional/widgets/ZentralWidgets.uc.js:5613:      // back. Nothing here reads the platform itself — `additional/boost/` owns the only reading — and nothing here
+MOVE   additional/widgets/ZentralWidgets.uc.js:5616:      // The card is a convenience, never the only door: with the tray disabled the Boost module still works through
+MOVE   additional/widgets/ZentralWidgets.uc.js:5617:      // its API and (in part three) its shortcut. The README of `additional/boost/` says so too.
+MOVE   additional/widgets/ZentralWidgets.uc.js:5618:      const boostModule = () => {
+MOVE   additional/widgets/ZentralWidgets.uc.js:5620:          const api = window.ZentralBoost;
+MOVE   additional/widgets/ZentralWidgets.uc.js:5626:      let boostUnsubscribe = null;
+MOVE   additional/widgets/ZentralWidgets.uc.js:5627:      let boostLastMB = null;
+MOVE   additional/widgets/ZentralWidgets.uc.js:5628:      let boostRunning = false;
+MOVE   additional/widgets/ZentralWidgets.uc.js:5629:      const boostWidgetDefinition = {
+MOVE   additional/widgets/ZentralWidgets.uc.js:5630:        id: "boost",
+MOVE   additional/widgets/ZentralWidgets.uc.js:5631:        title: tw("boost.title"),
+MOVE   additional/widgets/ZentralWidgets.uc.js:5641:          wrap.className = "zw-boost";
+MOVE   additional/widgets/ZentralWidgets.uc.js:5643:          valueEl.className = "zw-boost-value";
+MOVE   additional/widgets/ZentralWidgets.uc.js:5646:          labelEl.className = "zw-boost-label";
+MOVE   additional/widgets/ZentralWidgets.uc.js:5647:          labelEl.textContent = tw("boost.title");
+MOVE   additional/widgets/ZentralWidgets.uc.js:5650:          menuBtn.className = "zw-boost-menu-btn";
+MOVE   additional/widgets/ZentralWidgets.uc.js:5652:          // flow, but its four buttons now sit on ONE row; "..." opens it, "Boost levels and Restore" names it.
+MOVE   additional/widgets/ZentralWidgets.uc.js:5655:          menuBtn.setAttribute("aria-label", tw("boost.levels"));
+MOVE   additional/widgets/ZentralWidgets.uc.js:5661:          // The popup: a small list of what Boost can do. The entries that later parts add are drawn, greyed and
+MOVE   additional/widgets/ZentralWidgets.uc.js:5664:          popup.className = "zw-boost-popup";
+MOVE   additional/widgets/ZentralWidgets.uc.js:5667:          popup.setAttribute("aria-label", tw("boost.levels"));
+MOVE   additional/widgets/ZentralWidgets.uc.js:5671:            const parts = boostParts(boostLastMB);
+MOVE   additional/widgets/ZentralWidgets.uc.js:5676:              ? widgetText(resolveWidgetLanguage(lang.language, lang.notesRaw), "boost.aria", { value: parts.text })
+MOVE   additional/widgets/ZentralWidgets.uc.js:5677:              : widgetText(resolveWidgetLanguage(lang.language, lang.notesRaw), "boost.ariaUnknown"));
+MOVE   additional/widgets/ZentralWidgets.uc.js:5678:            wrap.setAttribute("data-zw-boost", parts ? String(parts.mb) : "");
+MOVE   additional/widgets/ZentralWidgets.uc.js:5686:            const items = boostMenuItems({
+MOVE   additional/widgets/ZentralWidgets.uc.js:5687:              running: boostRunning,
+MOVE   additional/widgets/ZentralWidgets.uc.js:5706:              row.className = "zw-boost-menu-item";
+MOVE   additional/widgets/ZentralWidgets.uc.js:5708:              row.setAttribute("data-zw-boost-action", item.id);
+MOVE   additional/widgets/ZentralWidgets.uc.js:5709:              if (item.level) row.setAttribute("data-zw-boost-level", item.level);
+MOVE   additional/widgets/ZentralWidgets.uc.js:5721:                  row.setAttribute("data-zw-boost-preview", line);
+MOVE   additional/widgets/ZentralWidgets.uc.js:5744:          const api = () => boostModule();
+MOVE   additional/widgets/ZentralWidgets.uc.js:5751:            const boost = api();
+MOVE   additional/widgets/ZentralWidgets.uc.js:5752:            if (!boost || typeof boost.previewGameMode !== "function" || boost.gameModeState?.()?.on) return "";
+MOVE   additional/widgets/ZentralWidgets.uc.js:5754:            try { preview = boost.previewGameMode(); } catch (_) { preview = null; }
+MOVE   additional/widgets/ZentralWidgets.uc.js:5755:            return typeof boost.widgetPreviewText === "function"
+MOVE   additional/widgets/ZentralWidgets.uc.js:5756:              ? boost.widgetPreviewText(preview, widgetLang())
+MOVE   additional/widgets/ZentralWidgets.uc.js:5757:              : boostGameModePreviewText(preview, languageOptions());
+MOVE   additional/widgets/ZentralWidgets.uc.js:5761:          let boostSampling = false;
+MOVE   additional/widgets/ZentralWidgets.uc.js:5763:            if (!boostSampling) return;
+MOVE   additional/widgets/ZentralWidgets.uc.js:5764:            boostSampling = false;
+MOVE   additional/widgets/ZentralWidgets.uc.js:5770:            if (boostSampling) return;
+MOVE   additional/widgets/ZentralWidgets.uc.js:5771:            const boost = api();
+MOVE   additional/widgets/ZentralWidgets.uc.js:5772:            if (!boost || typeof boost.startSampling !== "function") return;
+MOVE   additional/widgets/ZentralWidgets.uc.js:5773:            boostSampling = true;
+MOVE   additional/widgets/ZentralWidgets.uc.js:5775:              boost.startSampling();
+MOVE   additional/widgets/ZentralWidgets.uc.js:5777:              boostSampling = false;
+MOVE   additional/widgets/ZentralWidgets.uc.js:5809:            const boost = api();
+MOVE   additional/widgets/ZentralWidgets.uc.js:5810:            if (!boost || typeof boost.setGameMode !== "function") return Promise.resolve(null);
+MOVE   additional/widgets/ZentralWidgets.uc.js:5811:            const next = !Boolean(boost.gameModeState?.().on);
+MOVE   additional/widgets/ZentralWidgets.uc.js:5816:              result = boost.setGameMode(next);
+MOVE   additional/widgets/ZentralWidgets.uc.js:5825:              showWidgetToast(t(next ? "boost.gameModeOn" : "boost.gameModeOff"));
+MOVE   additional/widgets/ZentralWidgets.uc.js:5833:            const boost = api();
+MOVE   additional/widgets/ZentralWidgets.uc.js:5834:            if (!boost || typeof boost.runLevel2 !== "function") return null;
+MOVE   additional/widgets/ZentralWidgets.uc.js:5835:            if (boostRunning) return null;
+MOVE   additional/widgets/ZentralWidgets.uc.js:5836:            boostRunning = true;
+MOVE   additional/widgets/ZentralWidgets.uc.js:5838:            showWidgetToast(tw("boost.busy"));
+MOVE   additional/widgets/ZentralWidgets.uc.js:5841:              result = await boost.runLevel2();
+MOVE   additional/widgets/ZentralWidgets.uc.js:5845:              boostRunning = false;
+MOVE   additional/widgets/ZentralWidgets.uc.js:5848:            showWidgetToast(boostResultText(result, {
+MOVE   additional/widgets/ZentralWidgets.uc.js:5857:            const boost = api();
+MOVE   additional/widgets/ZentralWidgets.uc.js:5858:            const restoreDoor = typeof boost?.restoreSession === "function"
+MOVE   additional/widgets/ZentralWidgets.uc.js:5859:              ? () => boost.restoreSession()
+MOVE   additional/widgets/ZentralWidgets.uc.js:5860:              : typeof boost?.restore === "function" ? () => boost.restore() : null;
+MOVE   additional/widgets/ZentralWidgets.uc.js:5872:              showWidgetToast(widgetText(code, "boost.restored", { count: restored.panels }));
+MOVE   additional/widgets/ZentralWidgets.uc.js:5874:              showWidgetToast(widgetText(code, "boost.restoredTabs", { count: restored.tabs }));
+MOVE   additional/widgets/ZentralWidgets.uc.js:5882:            const boost = api();
+MOVE   additional/widgets/ZentralWidgets.uc.js:5883:            if (!boost) return null;
+MOVE   additional/widgets/ZentralWidgets.uc.js:5884:            const decision = resolveBoostClick({ available: true, running: boostRunning });
+MOVE   additional/widgets/ZentralWidgets.uc.js:5886:            boostRunning = true;
+MOVE   additional/widgets/ZentralWidgets.uc.js:5888:            showWidgetToast(tw("boost.busy"));
+MOVE   additional/widgets/ZentralWidgets.uc.js:5891:              result = await boost.runLevel1();
+MOVE   additional/widgets/ZentralWidgets.uc.js:5895:              boostRunning = false;
+MOVE   additional/widgets/ZentralWidgets.uc.js:5898:            showWidgetToast(boostResultText(result, {
+MOVE   additional/widgets/ZentralWidgets.uc.js:5907:            if (boostUnsubscribe) return;
+MOVE   additional/widgets/ZentralWidgets.uc.js:5908:            const boost = api();
+MOVE   additional/widgets/ZentralWidgets.uc.js:5909:            if (!boost || typeof boost.onChange !== "function") return;
+MOVE   additional/widgets/ZentralWidgets.uc.js:5911:              boostUnsubscribe = boost.onChange((value) => {
+MOVE   additional/widgets/ZentralWidgets.uc.js:5912:                boostLastMB = typeof value === "number" ? value : (typeof boost.lastMB === "function" ? boost.lastMB() : null);
+MOVE   additional/widgets/ZentralWidgets.uc.js:5915:              if (boostLastMB == null && typeof boost.lastMB === "function") {
+MOVE   additional/widgets/ZentralWidgets.uc.js:5916:                boostLastMB = boost.lastMB();
+MOVE   additional/widgets/ZentralWidgets.uc.js:5919:              boostUnsubscribe = null;
+MOVE   additional/widgets/ZentralWidgets.uc.js:5928:            const boost = api();
+MOVE   additional/widgets/ZentralWidgets.uc.js:5929:            if (!boost || typeof boost.onLimiterEvent !== "function") return;
+MOVE   additional/widgets/ZentralWidgets.uc.js:5931:              limiterUnsubscribe = boost.onLimiterEvent((event) => {
+MOVE   additional/widgets/ZentralWidgets.uc.js:5935:                  showWidgetToast(widgetText(code, "boost.limitHit", { mb: Math.round(Number(event.totalMB) || 0), limit: Math.round(Number(event.limitMB) || 0) }));
+MOVE   additional/widgets/ZentralWidgets.uc.js:5938:                  if (freed) showWidgetToast(widgetText(code, "boost.limitDone", { mb: Math.round(Number(event.totalMB) || 0) }));
+MOVE   additional/widgets/ZentralWidgets.uc.js:5940:                  showWidgetToast(widgetText(code, "boost.limitNothing"));
+MOVE   additional/widgets/ZentralWidgets.uc.js:5947:          // G7: the Boost module owns the ON, settled, 30 s final and OFF reports. The tray subscribes once,
+MOVE   additional/widgets/ZentralWidgets.uc.js:5951:            const boost = api();
+MOVE   additional/widgets/ZentralWidgets.uc.js:5952:            if (!boost || typeof boost.onGameModeEvent !== "function") return;
+MOVE   additional/widgets/ZentralWidgets.uc.js:5954:              gameModeUnsubscribe = boost.onGameModeEvent((event) => {
+MOVE   additional/widgets/ZentralWidgets.uc.js:5960:                  showWidgetToast(widgetText(code, "boost.gameStarting"));
+MOVE   additional/widgets/ZentralWidgets.uc.js:5965:                  const state = event.state || (typeof boost.gameModeState === "function" ? boost.gameModeState() : null);
+MOVE   additional/widgets/ZentralWidgets.uc.js:5966:                  const line = typeof boost.widgetFeedbackText === "function"
+MOVE   additional/widgets/ZentralWidgets.uc.js:5967:                    ? boost.widgetFeedbackText(state, widgetLang())
+MOVE   additional/widgets/ZentralWidgets.uc.js:5968:                    : boostGameModeFeedbackText(state, opts);
+MOVE   additional/widgets/ZentralWidgets.uc.js:5976:                    (typeof boost.gameModeState === "function" ? boost.gameModeState()?.snapshot : null) || {};
+MOVE   additional/widgets/ZentralWidgets.uc.js:5977:                  const line = typeof boost.widgetOffText === "function"
+MOVE   additional/widgets/ZentralWidgets.uc.js:5978:                    ? boost.widgetOffText(snapshot, widgetLang())
+MOVE   additional/widgets/ZentralWidgets.uc.js:5979:                    : boostGameModeOffText(snapshot, opts);
+MOVE   additional/widgets/ZentralWidgets.uc.js:5980:                  const counts = boostGameModeSnapshot(snapshot);
+MOVE   additional/widgets/ZentralWidgets.uc.js:5982:                    ? { label: widgetText(code, "boost.gameRestoreAction"), run: () => { void runRestore(); } }
+MOVE   additional/widgets/ZentralWidgets.uc.js:6035:              if (typeof boostUnsubscribe === "function") boostUnsubscribe();
+MOVE   additional/widgets/ZentralWidgets.uc.js:6039:            boostUnsubscribe = null;
+MOVE   additional/widgets/ZentralWidgets.uc.js:6049:              return { mb: boostLastMB, available: Boolean(api()) };
+MOVE   additional/widgets/ZentralWidgets.uc.js:6052:              // The number is painted by the module's callback; ensure late-registered Boost binds if it appeared later.
+DELETE additional/widgets/ZentralWidgets.uc.js:6068:      // Widgets-first installs already drew this definition; Boost then leaves it alone. Boost-first
+DELETE additional/widgets/ZentralWidgets.uc.js:6070:      const boostHandoff = window.__zentralBoostStandaloneWidget;
+DELETE additional/widgets/ZentralWidgets.uc.js:6071:      const trayTookBoost = boostHandoff && typeof boostHandoff.takeOver === "function"
+DELETE additional/widgets/ZentralWidgets.uc.js:6072:        ? boostHandoff.takeOver({
+DELETE additional/widgets/ZentralWidgets.uc.js:6077:            boostResultText,
+DELETE additional/widgets/ZentralWidgets.uc.js:6078:            boostPreviewText: boostGameModePreviewText,
+DELETE additional/widgets/ZentralWidgets.uc.js:6079:            boostFeedbackText: boostGameModeFeedbackText,
+DELETE additional/widgets/ZentralWidgets.uc.js:6080:            boostOffText: boostGameModeOffText,
+DELETE additional/widgets/ZentralWidgets.uc.js:6083:      if (!trayTookBoost) registerWidget(boostWidgetDefinition);
+DELETE additional/widgets/ZentralWidgets.uc.js:6085:      // The legacy choice is applied once both cards exist, so the migration can see the Boost definition.
+DELETE additional/widgets/ZentralWidgets.uc.js:6230:        // OW-94: whether Game Mode is holding this scheduler, for a live check and for the Boost card's own label.
+DELETE additional/widgets/preferences.json:263:    "label": "**Boost**",
+DELETE additional/widgets/preferences.json:267:    "property": "zen.workspace.zentral.widgets.boost.enabled",
+DELETE additional/widgets/preferences.json:268:    "label": "Show the Boost widget (memory and compact levels)",
+DELETE additional/widgets/preferences.json:269:    "description": "Boost replaces the old Status card: browser RAM plus compact Light, Deep, Game Mode and Restore cards; no extra widget height.",
+DELETE additional/widgets/settings.json:334:      "property": "zen.workspace.zentral.widgets.boost.enabled",
+DELETE additional/widgets/settings.json:335:      "label": "Show the Boost widget (memory and compact levels)",
+DELETE additional/widgets/settings.json:336:      "description": "Boost replaces the old Status card: browser RAM plus compact Light, Deep, Game Mode and Restore cards; no extra widget height.",
+DELETE additional/widgets/settings.json:533:    "zen.workspace.zentral.widgets.boost.enabled": {
+DELETE additional/widgets/settings.json:535:      "section": "Boost",
+KEEP   extension/settings/controllers/ZentralSettingsCatalog.js:22: *   additional/boost/settings.json; additional/video/settings.json;
+KEEP   extension/settings/controllers/ZentralSettingsCatalog.js:117:        // G11: Boost's 11 preferences are in preferences.json and layout.order, but without this
+KEEP   extension/settings/controllers/ZentralSettingsCatalog.js:120:        owner: "boost",
+KEEP   extension/settings/controllers/ZentralSettingsCatalog.js:121:        file: "additional/boost/settings.json",
+KEEP   extension/settings/layout.json:238:          "label": "Boost"
+KEEP   extension/settings/layout.json:346:      "id": "boost",
+KEEP   extension/settings/layout.json:347:      "label": "Memory Boost",
+KEEP   extension/settings/layout.json:349:      "owner": "boost",
+KEEP   extension/settings/layout.json:1030:      "label": "**Sidebar Widgets · Boost**",
+DELETE extension/settings/layout.json:1033:    "zen.workspace.zentral.widgets.boost.enabled",
+KEEP   extension/settings/layout.json:1161:      "label": "**Memory Boost · Memory**",
+KEEP   extension/settings/layout.json:1164:    "zen.workspace.zentral.boost.enabled",
+KEEP   extension/settings/layout.json:1165:    "zen.workspace.zentral.boost.startup_trim",
+KEEP   extension/settings/layout.json:1166:    "zen.workspace.zentral.boost.unload_pinned",
+KEEP   extension/settings/layout.json:1167:    "zen.workspace.zentral.boost.shortcut",
+KEEP   extension/settings/layout.json:1168:    "zen.workspace.zentral.boost.widget_enabled",
+KEEP   extension/settings/layout.json:1171:      "label": "**Memory Boost · Limiter**",
+KEEP   extension/settings/layout.json:1174:    "zen.workspace.zentral.boost.limit_enabled",
+KEEP   extension/settings/layout.json:1175:    "zen.workspace.zentral.boost.limit_mb",
+KEEP   extension/settings/layout.json:1176:    "zen.workspace.zentral.boost.limit_mode",
+KEEP   extension/settings/layout.json:1177:    "zen.workspace.zentral.boost.limit_cooldown_s",
+KEEP   extension/settings/layout.json:1178:    "zen.workspace.zentral.boost.limit_target_pct",
+KEEP   extension/settings/layout.json:1181:      "label": "**Memory Boost · Game Mode**",
+KEEP   extension/settings/layout.json:1184:    "zen.workspace.zentral.boost.game_mode",
+KEEP   extension/settings/layout.json:1185:    "zen.workspace.zentral.boost.stronger_saver",
+KEEP   extension/settings/layout.json:1186:    "zen.workspace.zentral.boost.game_keep_hosts",
+KEEP   extension/settings/layout.json:1187:    "zen.workspace.zentral.boost.game_park_selected",
+KEEP   extension/settings/layout.json:1188:    "zen.workspace.zentral.boost.game_restore_tabs",
+KEEP   extension/settings/layout.json:1189:    "zen.workspace.zentral.boost.game_restore_recent_n",
+KEEP   extension/settings/layout.json:1190:    "zen.workspace.zentral.boost.game_restore_stagger_ms",
+KEEP   extension/settings/layout.json:1191:    "zen.workspace.zentral.boost.game_restore_on_exit",
+KEEP   tests/helpers/fake-boost-holders-harness.cjs:4: * It boots the REAL `additional/boost/ZentralBoost.uc.js` with the shared tab policy, a panel layer that can hold a
+KEEP   tests/helpers/fake-boost-holders-harness.cjs:17:const BOOST_SRC = read("additional/boost/ZentralBoost.uc.js");
+KEEP   tests/helpers/fake-boost-holders-harness.cjs:76:function bootBoost({ tabs = [], records = [], prefs = {} } = {}) {
+KEEP   tests/helpers/fake-boost-holders-harness.cjs:78:    "zen.workspace.zentral.boost.enabled": true,
+KEEP   tests/helpers/fake-boost-holders-harness.cjs:79:    "zen.workspace.zentral.boost.startup_trim": false,
+KEEP   tests/helpers/fake-boost-holders-harness.cjs:80:    "zen.workspace.zentral.boost.game_park_selected": false,
+KEEP   tests/helpers/fake-boost-holders-harness.cjs:112:      const tab = makeTab({ url, label: "Boost parking" });
+KEEP   tests/helpers/fake-boost-holders-harness.cjs:113:      tab.setAttribute("zentral-boost-parking", "true");
+KEEP   tests/helpers/fake-boost-holders-harness.cjs:183:  vm.runInContext(BOOST_SRC, context, { filename: "ZentralBoost.uc.js" });
+KEEP   tests/helpers/fake-boost-holders-harness.cjs:184:  assert.ok(registration?.init, "the Boost module registers a feature");
+KEEP   tests/helpers/fake-boost-holders-harness.cjs:186:  const api = win.ZentralBoost;
+KEEP   tests/helpers/fake-boost-holders-harness.cjs:187:  assert.ok(api, "the Boost API is published");
+KEEP   tests/helpers/fake-boost-holders-harness.cjs:216:module.exports = { bootBoost, makeTab, makeRecord, read, ROOT, BOOST_SRC, policy };
+KEEP   tests/ow-108-calendar-weather.test.cjs:72:      "zen.workspace.zentral.widgets.boost.enabled": false,
+KEEP   tests/ow-108-calendar-weather.test.cjs:344:      "zen.workspace.zentral.widgets.boost.enabled": false,
+KEEP   tests/ow-109-weather-views.test.cjs:161:    "zen.workspace.zentral.widgets.boost.enabled": false,
+KEEP   tests/ow-110-boost-audit.test.cjs:3:/* OW-110: Boost bug pass & Game Mode RAM regression tests.
+KEEP   tests/ow-110-boost-audit.test.cjs:6: * created and loaded via `getOrCreateAppBrowser`) plus the full Boost audit defects:
+KEEP   tests/ow-110-boost-audit.test.cjs:18: *   8. Boost widget card wires `startSampling`/`stopSampling` on popup open/close, cleans up document listeners on
+KEEP   tests/ow-110-boost-audit.test.cjs:19: *      card `dispose()`, and subscribes lazily if `ZentralBoost` initializes after `ZentralWidgets`.
+KEEP   tests/ow-110-boost-audit.test.cjs:31:const BOOST_SRC = read("additional/boost/ZentralBoost.uc.js");
+KEEP   tests/ow-110-boost-audit.test.cjs:69:function bootBoost({ prefs = {}, tabs = [], essentialRecords = [], loadedPanelBrowsers = [], procInfo } = {}) {
+KEEP   tests/ow-110-boost-audit.test.cjs:71:    "zen.workspace.zentral.boost.enabled": true,
+KEEP   tests/ow-110-boost-audit.test.cjs:72:    "zen.workspace.zentral.boost.startup_trim": false,
+KEEP   tests/ow-110-boost-audit.test.cjs:166:          const gameOn = Boolean(win.ZentralBoost?.gameModeState?.().on);
+KEEP   tests/ow-110-boost-audit.test.cjs:201:  vm.runInContext(BOOST_SRC, context, { filename: "ZentralBoost.uc.js" });
+KEEP   tests/ow-110-boost-audit.test.cjs:205:    api: win.ZentralBoost,
+KEEP   tests/ow-110-boost-audit.test.cjs:233:  const h = bootBoost({
+KEEP   tests/ow-110-boost-audit.test.cjs:277:  const window = { ZentralBoost: { gameModeState: () => ({ on: true }) }, Zentral: undefined };
+KEEP   tests/ow-110-boost-audit.test.cjs:284:    () => Boolean(window.ZentralBoost?.gameModeState?.().on));
+KEEP   tests/ow-110-boost-audit.test.cjs:299:  const h = bootBoost({
+KEEP   tests/ow-110-boost-audit.test.cjs:300:    prefs: { "zen.workspace.zentral.boost.stronger_saver": true },
+KEEP   tests/ow-110-boost-audit.test.cjs:317:  const h = bootBoost();
+KEEP   tests/ow-110-boost-audit.test.cjs:319:  assert.equal(h.store.get("zen.workspace.zentral.boost.game_mode"), true);
+KEEP   tests/ow-110-boost-audit.test.cjs:321:  assert.equal(h.store.get("zen.workspace.zentral.boost.game_mode"), false, "pref is cleared on teardown so next start is off");
+KEEP   tests/ow-110-boost-audit.test.cjs:327:  const h = bootBoost({ tabs: [makeTab({ browser: makeBrowser({ active: true }), selected: true }), bgTab] });
+KEEP   tests/ow-110-boost-audit.test.cjs:333:  const h2 = bootBoost({ tabs: [makeTab({ browser: makeBrowser({ active: true }), selected: true }), makeTab({ browser: makeBrowser({ active: true }), label: "bg2" })] });
+KEEP   tests/ow-110-boost-audit.test.cjs:342:  const h = bootBoost({
+KEEP   tests/ow-110-boost-audit.test.cjs:351:test("Boost widget card toggles sampling with the popup and cleans up listeners on dispose()", async () => {
+KEEP   tests/ow-110-boost-audit.test.cjs:357:    "zen.workspace.zentral.widgets.boost.enabled": true,
+KEEP   tests/ow-110-boost-audit.test.cjs:362:  const boost = {
+KEEP   tests/ow-110-boost-audit.test.cjs:372:  h.window.ZentralBoost = boost;
+KEEP   tests/ow-110-boost-audit.test.cjs:376:  const card = api.getTray().children.find((el) => el.getAttribute("data-zw-widget") === "boost");
+KEEP   tests/ow-110-boost-audit.test.cjs:377:  const body = card.querySelector(".zw-boost");
+KEEP   tests/ow-110-boost-audit.test.cjs:378:  const arrow = body.querySelector(".zw-boost-menu-btn");
+KEEP   tests/ow-110-boost-audit.test.cjs:381:  assert.equal(sampling, 1, "opening Boost popup starts 2s sampling");
+KEEP   tests/ow-110-boost-audit.test.cjs:383:  // Disable just the boost card (calls card dispose() without destroying whole shell)
+KEEP   tests/ow-110-boost-audit.test.cjs:384:  h.Services.prefs.setBoolPref("zen.workspace.zentral.widgets.boost.enabled", false);
+KEEP   tests/ow-110-boost-audit.test.cjs:392:test("Boost widget card lazily attaches if ZentralBoost registers after ZentralWidgets", async () => {
+KEEP   tests/ow-110-boost-audit.test.cjs:398:    "zen.workspace.zentral.widgets.boost.enabled": true,
+KEEP   tests/ow-110-boost-audit.test.cjs:402:  const card = api.getTray().children.find((el) => el.getAttribute("data-zw-widget") === "boost");
+KEEP   tests/ow-110-boost-audit.test.cjs:403:  const valueEl = card.querySelector(".zw-boost-value");
+KEEP   tests/ow-110-boost-audit.test.cjs:407:  h.window.ZentralBoost = {
+KEEP   tests/ow-110-boost-audit.test.cjs:412:  const arrow = card.querySelector(".zw-boost-menu-btn");
+KEEP   tests/ow-110-boost-audit.test.cjs:415:  assert.equal(valueEl.textContent, "777 MB", "card picks up late-initialized ZentralBoost");
+KEEP   tests/ow-110-boost-audit.test.cjs:421:  const h = bootBoost({
+KEEP   tests/ow-110-boost-audit.test.cjs:422:    prefs: { "zen.workspace.zentral.boost.startup_trim": true },
+KEEP   tests/ow-110-boost-audit.test.cjs:451:  const h = bootBoost({
+KEEP   tests/ow-110-boost-audit.test.cjs:453:      "zen.workspace.zentral.boost.limit_enabled": true,
+KEEP   tests/ow-110-boost-audit.test.cjs:454:      "zen.workspace.zentral.boost.limit_mb": 500,
+KEEP   tests/ow-110-boost-audit.test.cjs:455:      "zen.workspace.zentral.boost.limit_mode": "hard",
+KEEP   tests/ow-110-boost-audit.test.cjs:456:      "zen.workspace.zentral.boost.limit_target_pct": 80,
+KEEP   tests/ow-110-boost-audit.test.cjs:466:  h.store.set("zen.workspace.zentral.boost.limit_enabled", false);
+KEEP   tests/ow-110-boost-audit.test.cjs:480:  console.log(`\now-110-boost-audit (${passed} passed)`);
+KEEP   tests/ow-111-panel-record-modes.test.cjs:21:const BOOST_SRC = fs.readFileSync(path.join(REPO, "additional/boost/ZentralBoost.uc.js"), "utf8");
+KEEP   tests/ow-111-panel-record-modes.test.cjs:24:const PINNED_PREF = "zen.workspace.zentral.boost.unload_pinned";
+KEEP   tests/ow-111-panel-record-modes.test.cjs:71:    "zen.workspace.zentral.boost.enabled": true,
+KEEP   tests/ow-111-panel-record-modes.test.cjs:72:    "zen.workspace.zentral.boost.startup_trim": false,
+KEEP   tests/ow-111-panel-record-modes.test.cjs:163:  vm.runInContext(BOOST_SRC, context, { filename: "ZentralBoost.uc.js" });
+KEEP   tests/ow-111-panel-record-modes.test.cjs:166:  const api = win.ZentralBoost;
+KEEP   tests/ow-111-panel-record-modes.test.cjs:294:      "zen.workspace.zentral.boost.limit_enabled": true,
+KEEP   tests/ow-111-panel-record-modes.test.cjs:295:      "zen.workspace.zentral.boost.limit_mb": 100,
+KEEP   tests/ow-111-panel-record-modes.test.cjs:296:      "zen.workspace.zentral.boost.limit_mode": "hard",
+KEEP   tests/ow-111-panel-record-modes.test.cjs:297:      "zen.workspace.zentral.boost.limit_cooldown_s": 0,
+KEEP   tests/ow-111-panel-record-modes.test.cjs:298:      "zen.workspace.zentral.boost.limit_target_pct": 85,
+KEEP   tests/ow-111-panel-record-modes.test.cjs:314:    prefs: { [PINNED_PREF]: true, "zen.workspace.zentral.boost.game_park_selected": false },
+KEEP   tests/ow-112-unload-pinned-pref.test.cjs:3:/* OW-112 (owner audit F2): `zen.workspace.zentral.boost.keep_pinned = true` actually means
+KEEP   tests/ow-112-unload-pinned-pref.test.cjs:17:const OLD = "zen.workspace.zentral.boost.keep_pinned";
+KEEP   tests/ow-112-unload-pinned-pref.test.cjs:18:const NEW = "zen.workspace.zentral.boost.unload_pinned";
+KEEP   tests/ow-112-unload-pinned-pref.test.cjs:20:const BOOST_SRC = read("additional/boost/ZentralBoost.uc.js");
+KEEP   tests/ow-112-unload-pinned-pref.test.cjs:29:  const settings = json("additional/boost/settings.json");
+KEEP   tests/ow-112-unload-pinned-pref.test.cjs:35:  assert.equal(settings.settings[NEW]?.category, "boost");
+KEEP   tests/ow-112-unload-pinned-pref.test.cjs:37:  assert.equal(settings.settings[NEW]?.owner, "boost");
+KEEP   tests/ow-112-unload-pinned-pref.test.cjs:42:  assert.ok(json("additional/boost/preferences.json").some((x) => x.property === NEW && x.defaultValue === false),
+KEEP   tests/ow-112-unload-pinned-pref.test.cjs:51:  for (const file of ["additional/boost/settings.json", "additional/boost/preferences.json",
+KEEP   tests/ow-112-unload-pinned-pref.test.cjs:57:  assert.match(BOOST_SRC, /UNLOAD_PINNED:\s*"zen\.workspace\.zentral\.boost\.unload_pinned"/,
+KEEP   tests/ow-112-unload-pinned-pref.test.cjs:62:  assert.match(read("additional/boost/README.md"), /unload_pinned/);
+KEEP   tests/ow-112-unload-pinned-pref.test.cjs:83:    "zen.workspace.zentral.boost.enabled": true,
+KEEP   tests/ow-112-unload-pinned-pref.test.cjs:84:    "zen.workspace.zentral.boost.startup_trim": false,
+KEEP   tests/ow-112-unload-pinned-pref.test.cjs:143:  vm.runInContext(BOOST_SRC, context, { filename: "ZentralBoost.uc.js" });
+KEEP   tests/ow-112-unload-pinned-pref.test.cjs:145:  const api = win.ZentralBoost;
+KEEP   tests/ow-113-video-source-tab.test.cjs:3:/* OW-113 (owner audit F3): Boost's "never unload the Big Picture source tab" rule was dead code.
+KEEP   tests/ow-113-video-source-tab.test.cjs:21:const BOOST_SRC = read("additional/boost/ZentralBoost.uc.js");
+KEEP   tests/ow-113-video-source-tab.test.cjs:129:/* ---------------- 2. every Boost pass honours that getter ---------------- */
+KEEP   tests/ow-113-video-source-tab.test.cjs:145:function bootBoost({ tabs = [], sourceTab = null, zentralVideo = null, readings = [900], prefs = {} } = {}) {
+KEEP   tests/ow-113-video-source-tab.test.cjs:147:    "zen.workspace.zentral.boost.enabled": true,
+KEEP   tests/ow-113-video-source-tab.test.cjs:148:    "zen.workspace.zentral.boost.startup_trim": false,
+KEEP   tests/ow-113-video-source-tab.test.cjs:213:  vm.runInContext(BOOST_SRC, context, { filename: "ZentralBoost.uc.js" });
+KEEP   tests/ow-113-video-source-tab.test.cjs:215:  const api = win.ZentralBoost;
+KEEP   tests/ow-113-video-source-tab.test.cjs:239:  const h = bootBoost({ tabs: [source, old], sourceTab: source });
+KEEP   tests/ow-113-video-source-tab.test.cjs:247:  const none = bootBoost({ tabs: [tab({ url: "https://video.example/" })] });
+KEEP   tests/ow-113-video-source-tab.test.cjs:259:  const h = bootBoost({
+KEEP   tests/ow-113-video-source-tab.test.cjs:262:      "zen.workspace.zentral.boost.limit_enabled": true,
+KEEP   tests/ow-113-video-source-tab.test.cjs:263:      "zen.workspace.zentral.boost.limit_mb": 100,
+KEEP   tests/ow-113-video-source-tab.test.cjs:264:      "zen.workspace.zentral.boost.limit_mode": "hard",
+KEEP   tests/ow-113-video-source-tab.test.cjs:265:      "zen.workspace.zentral.boost.limit_cooldown_s": 0,
+KEEP   tests/ow-113-video-source-tab.test.cjs:266:      "zen.workspace.zentral.boost.limit_target_pct": 85,
+KEEP   tests/ow-113-video-source-tab.test.cjs:280:  const h = bootBoost({ tabs: [source, old], sourceTab: source });
+KEEP   tests/ow-113-video-source-tab.test.cjs:295:  const h = bootBoost({ tabs: [source], zentralVideo: source });
+KEEP   tests/ow-115-boost-skipped.test.cjs:18:const BOOST_SRC = read("additional/boost/ZentralBoost.uc.js");
+KEEP   tests/ow-115-boost-skipped.test.cjs:40:  assert.equal(typeof c.boostSkippedLine, "function", "the pure formatter is exported");
+KEEP   tests/ow-115-boost-skipped.test.cjs:41:  assert.equal(c.boostSkippedLine({ "audible": 2, "pinned-kept": 12, "pending": 1 }),
+KEEP   tests/ow-115-boost-skipped.test.cjs:43:  assert.equal(c.boostSkippedLine({ "audible": 0, "pinned-kept": "junk" }), "", "junk is ignored");
+KEEP   tests/ow-115-boost-skipped.test.cjs:44:  assert.equal(c.boostSkippedLine(null), "");
+KEEP   tests/ow-115-boost-skipped.test.cjs:47:    assert.ok(c.WIDGET_STRINGS[lang]["boost.skipped"], lang + " has the skipped template");
+KEEP   tests/ow-115-boost-skipped.test.cjs:48:    assert.ok(c.WIDGET_STRINGS[lang]["boost.loaded"], lang + " has the loaded-tabs template");
+KEEP   tests/ow-115-boost-skipped.test.cjs:50:  assert.notEqual(c.WIDGET_STRINGS.pl["boost.skipped"], c.WIDGET_STRINGS.en["boost.skipped"]);
+KEEP   tests/ow-115-boost-skipped.test.cjs:51:  assert.notEqual(c.WIDGET_STRINGS.pl["boost.loaded"], c.WIDGET_STRINGS.en["boost.loaded"]);
+KEEP   tests/ow-115-boost-skipped.test.cjs:54:test("the Boost menu data shows the grouped reasons and loaded-tab counts in both languages", () => {
+KEEP   tests/ow-115-boost-skipped.test.cjs:57:  const en = c.boostMenuItems({ running: false, canDeep: true, skipped, loadedTabs });
+KEEP   tests/ow-115-boost-skipped.test.cjs:61:  assert.equal(row.label, c.WIDGET_STRINGS.en["boost.skipped"].replace("{reasons}", "pinned-kept: 12 \u00b7 audible: 2"));
+KEEP   tests/ow-115-boost-skipped.test.cjs:62:  assert.equal(row.hint, c.WIDGET_STRINGS.en["boost.loaded"].replace("{pinned}", "12").replace("{unpinned}", "7"));
+KEEP   tests/ow-115-boost-skipped.test.cjs:63:  const pl = c.boostMenuItems({ running: false, canDeep: true, skipped, loadedTabs, language: "pl" });
+KEEP   tests/ow-115-boost-skipped.test.cjs:65:  assert.equal(plRow.label, c.WIDGET_STRINGS.pl["boost.skipped"].replace("{reasons}", "pinned-kept: 12 \u00b7 audible: 2"));
+KEEP   tests/ow-115-boost-skipped.test.cjs:66:  assert.equal(plRow.hint, c.WIDGET_STRINGS.pl["boost.loaded"].replace("{pinned}", "12").replace("{unpinned}", "7"));
+KEEP   tests/ow-115-boost-skipped.test.cjs:68:  const plain = c.boostMenuItems({ running: false, canDeep: true });
+KEEP   tests/ow-115-boost-skipped.test.cjs:74:  assert.equal(/zen\.workspace\.zentral\.boost\.(?:skipped|loaded)/.test(WIDGET_SRC), false);
+KEEP   tests/ow-115-boost-skipped.test.cjs:75:  assert.equal(/zen\.workspace\.zentral\.boost\.(?:skipped|loaded)/.test(BOOST_SRC), false);
+KEEP   tests/ow-115-boost-skipped.test.cjs:76:  assert.equal(SETTINGS.schema.some((x) => /boost\.(skipped|loaded)/.test(x.property)), false);
+KEEP   tests/ow-115-boost-skipped.test.cjs:79:/* ---------------- Boost state and the real deep pass ---------------- */
+KEEP   tests/ow-115-boost-skipped.test.cjs:97:function bootBoost(tabs) {
+KEEP   tests/ow-115-boost-skipped.test.cjs:99:    "zen.workspace.zentral.boost.enabled": true,
+KEEP   tests/ow-115-boost-skipped.test.cjs:100:    "zen.workspace.zentral.boost.startup_trim": false,
+KEEP   tests/ow-115-boost-skipped.test.cjs:147:  vm.runInContext(BOOST_SRC, context, { filename: "ZentralBoost.uc.js" });
+KEEP   tests/ow-115-boost-skipped.test.cjs:149:  const api = win.ZentralBoost;
+KEEP   tests/ow-115-boost-skipped.test.cjs:172:  const h = bootBoost([...pinned, essential, ...ordinary, audible, parked, discarded, dormant]);
+KEEP   tests/ow-115-boost-skipped.test.cjs:195:  const empty = bootBoost([]);
+KEEP   tests/ow-115-boost-skipped.test.cjs:208:  console.log(`\now-115-boost-skipped (${passed} passed)`);
+KEEP   tests/ow-118-boost-procinfo-bytes.test.cjs:2:/* Owner bug 4 (2026-11-18): Boost reported `3202756,6 GB`. Firefox ProcInfo.memory is BYTES,
+KEEP   tests/ow-118-boost-procinfo-bytes.test.cjs:5: * runs the real Boost source with realistic byte fixtures and the real widget formatter. */
+KEEP   tests/ow-118-boost-procinfo-bytes.test.cjs:13:const BOOST_SRC = read("additional/boost/ZentralBoost.uc.js");
+KEEP   tests/ow-118-boost-procinfo-bytes.test.cjs:77:  vm.runInContext(BOOST_SRC, context, { filename: "ZentralBoost.uc.js" });
+KEEP   tests/ow-118-boost-procinfo-bytes.test.cjs:78:  assert.ok(registration?.init, "Boost registers a feature with init");
+KEEP   tests/ow-118-boost-procinfo-bytes.test.cjs:80:  const api = win.ZentralBoost;
+KEEP   tests/ow-118-boost-procinfo-bytes.test.cjs:81:  assert.ok(api, "Boost publishes its API");
+KEEP   tests/ow-118-boost-procinfo-bytes.test.cjs:110:  assert.deepEqual(plain(core.boostParts(mb)), { mb: 3203, text: "3.2 GB", level: "ok" });
+KEEP   tests/ow-118-boost-procinfo-bytes.test.cjs:111:  assert.equal(plain(core.boostParts(mb)).text.includes("3202756"), false, "the old 3202756,6 GB reading is gone");
+KEEP   tests/ow-118-boost-procinfo-bytes.test.cjs:134:  const src = read("additional/boost/ZentralBoost.uc.js");
+KEEP   tests/ow-118-boost-procinfo-bytes.test.cjs:136:  const readme = read("additional/boost/README.md");
+KEEP   tests/ow-118-boost-procinfo-bytes.test.cjs:151:  console.log(`\now-118-boost-procinfo-bytes (${passed} passed)`);
+MOVE   tests/ow-121-boost-ux.test.cjs:2:/* OW-121 — Boost UX: all four owner propositions, with no extra widget height.
+MOVE   tests/ow-121-boost-ux.test.cjs:5: * drives the real widget and Boost sources. Live popup height/appearance remains an OWNER GATE.
+MOVE   tests/ow-121-boost-ux.test.cjs:17:const BOOST_SRC = read("additional/boost/ZentralBoost.uc.js");
+MOVE   tests/ow-121-boost-ux.test.cjs:20:  "docs/ow-121-boost-ux.md",
+MOVE   tests/ow-121-boost-ux.test.cjs:25:  "additional/boost/README.md",
+MOVE   tests/ow-121-boost-ux.test.cjs:48:test("Boost menu data has three level cards, compact labels and deterministic one-line descriptions", () => {
+MOVE   tests/ow-121-boost-ux.test.cjs:49:  const en = c.boostMenuItems({ running: false, canDeep: true });
+MOVE   tests/ow-121-boost-ux.test.cjs:54:  assert.equal(byId["free-light"].shortLabel, c.WIDGET_STRINGS.en["boost.shortLight"]);
+MOVE   tests/ow-121-boost-ux.test.cjs:55:  assert.equal(byId["free-deep"].shortLabel, c.WIDGET_STRINGS.en["boost.shortDeep"]);
+MOVE   tests/ow-121-boost-ux.test.cjs:56:  assert.equal(byId["game-mode"].shortLabel, c.WIDGET_STRINGS.en["boost.shortGame"]);
+MOVE   tests/ow-121-boost-ux.test.cjs:58:    ["free-light", "boost.levelLight"], ["free-deep", "boost.levelDeep"],
+MOVE   tests/ow-121-boost-ux.test.cjs:59:    ["game-mode", "boost.levelGame"], ["restore", "boost.levelRestore"],
+MOVE   tests/ow-121-boost-ux.test.cjs:67:  const pl = c.boostMenuItems({ running: false, canDeep: true, language: "pl" });
+MOVE   tests/ow-121-boost-ux.test.cjs:68:  assert.equal(pl.find((x) => x.id === "free-light").description, c.WIDGET_STRINGS.pl["boost.levelLight"]);
+MOVE   tests/ow-121-boost-ux.test.cjs:69:  assert.notEqual(c.WIDGET_STRINGS.pl["boost.levelLight"], c.WIDGET_STRINGS.en["boost.levelLight"]);
+MOVE   tests/ow-121-boost-ux.test.cjs:78:  const h = bootBoost();
+MOVE   tests/ow-121-boost-ux.test.cjs:95:  assert.equal(typeof c.boostSkippedCount, "function", "the pure skip counter is exported");
+MOVE   tests/ow-121-boost-ux.test.cjs:96:  assert.equal(c.boostSkippedCount({ skippedCounts: { "pinned-kept": 2, audible: 1 } }), 3);
+MOVE   tests/ow-121-boost-ux.test.cjs:97:  assert.equal(c.boostSkippedCount({ skippedCounts: { junk: "x", zero: 0 } }), 0);
+MOVE   tests/ow-121-boost-ux.test.cjs:98:  assert.equal(c.boostSkippedCount(null), 0);
+MOVE   tests/ow-121-boost-ux.test.cjs:99:  const en = c.boostResultText({
+MOVE   tests/ow-121-boost-ux.test.cjs:104:  const pl = c.boostResultText({ freedMB: 10, skippedCounts: { audible: 2 } }, { language: "pl" });
+MOVE   tests/ow-121-boost-ux.test.cjs:106:  assert.equal(c.boostResultText({ freedMB: 10 }), "Freed 10 MB", "no skipped data keeps the old short line");
+MOVE   tests/ow-121-boost-ux.test.cjs:113:    WIDGET_CSS.indexOf("#zentral-sidebar-widgets .zw-boost-popup {"),
+MOVE   tests/ow-121-boost-ux.test.cjs:114:    WIDGET_CSS.indexOf("#zentral-sidebar-widgets .zw-boost-popup[hidden]"));
+MOVE   tests/ow-121-boost-ux.test.cjs:121:    WIDGET_CSS.indexOf("#zentral-sidebar-widgets .zw-boost-menu-item {"),
+MOVE   tests/ow-121-boost-ux.test.cjs:122:    WIDGET_CSS.indexOf("#zentral-sidebar-widgets .zw-boost-menu-item:hover"));
+MOVE   tests/ow-121-boost-ux.test.cjs:128:    WIDGET_CSS.indexOf("#zentral-sidebar-widgets .zw-boost-menu-note {"),
+MOVE   tests/ow-121-boost-ux.test.cjs:132:    WIDGET_SRC.indexOf("const api = () => boostModule()"));
+MOVE   tests/ow-121-boost-ux.test.cjs:135:  assert.match(paint, /data-zw-boost-level/, "level cards carry their level in the DOM");
+MOVE   tests/ow-121-boost-ux.test.cjs:144:    "zen.workspace.zentral.widgets.boost.enabled": true,
+MOVE   tests/ow-121-boost-ux.test.cjs:146:  h.window.ZentralBoost = makeBoostModule();
+MOVE   tests/ow-121-boost-ux.test.cjs:149:  const card = api.getTray().children.find((el) => el.getAttribute("data-zw-widget") === "boost");
+MOVE   tests/ow-121-boost-ux.test.cjs:150:  const body = card.querySelector(".zw-boost");
+MOVE   tests/ow-121-boost-ux.test.cjs:151:  const popup = body.querySelector(".zw-boost-popup");
+MOVE   tests/ow-121-boost-ux.test.cjs:152:  const arrow = body.querySelector(".zw-boost-menu-btn");
+MOVE   tests/ow-121-boost-ux.test.cjs:156:  assert.equal(popup.querySelector(".zw-boost-menu-note"), null);
+MOVE   tests/ow-121-boost-ux.test.cjs:157:  assert.equal(popup.querySelector('[data-zw-boost-action="deep-skipped"]'), null);
+MOVE   tests/ow-121-boost-ux.test.cjs:158:  assert.deepEqual(popup.children.slice(0, 3).map((el) => el.getAttribute("data-zw-boost-level")),
+MOVE   tests/ow-121-boost-ux.test.cjs:178:  assert.match(read("docs/ow-121-boost-ux.md"), /no.*height|height.*not/i);
+MOVE   tests/ow-121-boost-ux.test.cjs:179:  assert.match(read("docs/ow-121-boost-ux.md"), /OWNER GATE/);
+MOVE   tests/ow-121-boost-ux.test.cjs:180:  assert.match(read(".gitignore"), /!docs\/ow-121-boost-ux\.md/);
+MOVE   tests/ow-121-boost-ux.test.cjs:196:function makeBoostModule() {
+MOVE   tests/ow-121-boost-ux.test.cjs:243:function bootBoost() {
+MOVE   tests/ow-121-boost-ux.test.cjs:263:        getBoolPref: (k, d) => (k === "zen.workspace.zentral.boost.enabled" ? true : d),
+MOVE   tests/ow-121-boost-ux.test.cjs:312:  vm.runInContext(BOOST_SRC, context, { filename: "ZentralBoost.uc.js" });
+MOVE   tests/ow-121-boost-ux.test.cjs:313:  assert.ok(registration?.init, "Boost registers");
+MOVE   tests/ow-121-boost-ux.test.cjs:315:  const api = win.ZentralBoost;
+MOVE   tests/ow-121-boost-ux.test.cjs:339:  console.log(`\now-121-boost-ux (${passed} passed)`);
+KEEP   tests/ow-127-widget-space-priority.test.cjs:20:const IDS = ["clock", "date", "weather", "boost"];
+KEEP   tests/ow-127-widget-space-priority.test.cjs:61:    const policy = plain(core.cleanWidgetSpacePolicy("boost, missing, clock", "weather, clock", IDS));
+KEEP   tests/ow-127-widget-space-priority.test.cjs:62:    assert.deepEqual(policy.priority, ["boost", "clock", "date", "weather"], "known chosen first, rest keep default order");
+KEEP   tests/ow-127-widget-space-priority.test.cjs:64:    assert.deepEqual(policy.never, ["date", "boost"], "the complementary never list keeps registered-id order");
+KEEP   tests/ow-127-widget-space-priority.test.cjs:74:    const policy = core.cleanWidgetSpacePolicy("boost, clock", "weather, clock", IDS);
+KEEP   tests/ow-127-widget-space-priority.test.cjs:76:    assert.deepEqual(plan.visible, ["boost", "clock"]);
+KEEP   tests/ow-127-widget-space-priority.test.cjs:79:    assert.deepEqual(plan.order, ["boost", "clock", "weather"]);
+KEEP   tests/ow-127-widget-space-priority.test.cjs:82:    const fixed = plain(core.planWidgetSpace(DEFS, core.cleanWidgetSpacePolicy("boost, clock", "none", IDS), { maxHeight: 100, minHeight: 50, pressure: true }));
+KEEP   tests/ow-127-widget-space-priority.test.cjs:89:    const policy = core.cleanWidgetSpacePolicy("boost", "clock", IDS);
+KEEP   tests/ow-89-boost-core.test.cjs:3:/* OW-89 (plan B2): the Boost core. Three claims, each measurable in Node against the real module source:
+KEEP   tests/ow-89-boost-core.test.cjs:17:const SRC = fs.readFileSync(path.join(REPO, "additional/boost/ZentralBoost.uc.js"), "utf8");
+KEEP   tests/ow-89-boost-core.test.cjs:123:  vm.runInContext(SRC, context, { filename: "ZentralBoost.uc.js" });
+KEEP   tests/ow-89-boost-core.test.cjs:127:  const api = win.ZentralBoost;
+KEEP   tests/ow-89-boost-core.test.cjs:128:  assert.ok(api, "the module publishes window.ZentralBoost");
+KEEP   tests/ow-89-boost-core.test.cjs:314:  const h = boot({ prefs: { "zen.workspace.zentral.boost.startup_trim": false } });
+KEEP   tests/ow-89-boost-core.test.cjs:342:  assert.equal(h.win.ZentralBoost, undefined, "the public API is gone");
+KEEP   tests/ow-89-boost-core.test.cjs:359:  console.log(`\now-89-boost-core: ${passed} passed`);
+KEEP   tests/ow-91-boost-deep.test.cjs:15:const BOOST_SRC = fs.readFileSync(path.join(REPO, "additional/boost/ZentralBoost.uc.js"), "utf8");
+KEEP   tests/ow-91-boost-deep.test.cjs:128:function bootBoost({ prefs = {}, tabs = [], panels = [], sessionUrls = {} } = {}) {
+KEEP   tests/ow-91-boost-deep.test.cjs:130:    "zen.workspace.zentral.boost.enabled": true,
+KEEP   tests/ow-91-boost-deep.test.cjs:131:    "zen.workspace.zentral.boost.startup_trim": false,
+KEEP   tests/ow-91-boost-deep.test.cjs:223:  vm.runInContext(BOOST_SRC, context, { filename: "ZentralBoost.uc.js" });
+KEEP   tests/ow-91-boost-deep.test.cjs:226:  const api = win.ZentralBoost;
+KEEP   tests/ow-91-boost-deep.test.cjs:274:  const h = bootBoost({ tabs: [selected, audible, pinned, old, fresh, discarded] });
+KEEP   tests/ow-91-boost-deep.test.cjs:293:  const h = bootBoost({ tabs: [a, b, c] });
+KEEP   tests/ow-91-boost-deep.test.cjs:305:  const off = bootBoost({ tabs: [pinned, essential] });
+KEEP   tests/ow-91-boost-deep.test.cjs:313:  const on = bootBoost({
+KEEP   tests/ow-91-boost-deep.test.cjs:315:    prefs: { "zen.workspace.zentral.boost.unload_pinned": true },
+KEEP   tests/ow-91-boost-deep.test.cjs:329:  const h = bootBoost({ tabs: [], panels: [live, throttled, asleep] });
+KEEP   tests/ow-91-boost-deep.test.cjs:359:  const h = bootBoost({
+KEEP   tests/ow-91-boost-deep.test.cjs:362:    prefs: { "zen.workspace.zentral.boost.unload_pinned": true },
+KEEP   tests/ow-91-boost-deep.test.cjs:379:  const h = bootBoost({ tabs: [tab({ url: "https://a/" })] });
+KEEP   tests/ow-91-boost-deep.test.cjs:391:  const h = bootBoost({ panels: [live] });
+KEEP   tests/ow-91-boost-deep.test.cjs:410:  const h = bootBoost({ tabs });
+KEEP   tests/ow-91-boost-deep.test.cjs:424:  const h = bootBoost({ prefs: { "zen.workspace.zentral.boost.shortcut": "" } });
+KEEP   tests/ow-91-boost-deep.test.cjs:428:  const single = bootBoost({ prefs: { "zen.workspace.zentral.boost.shortcut": "B" } });
+KEEP   tests/ow-91-boost-deep.test.cjs:432:  const good = bootBoost({ prefs: { "zen.workspace.zentral.boost.shortcut": "Accel+Shift+B" } });
+KEEP   tests/ow-91-boost-deep.test.cjs:438:  const h = bootBoost({
+KEEP   tests/ow-91-boost-deep.test.cjs:439:    prefs: { "zen.workspace.zentral.boost.shortcut": "Accel+Shift+B" },
+KEEP   tests/ow-91-boost-deep.test.cjs:477:  console.log(`\now-91-boost-deep (${passed} passed)`);
+KEEP   tests/ow-92-boost-limiter.test.cjs:5: * The limiter is the one part of Boost that acts on its own, so its state machine is proven on its own first: the pure
+KEEP   tests/ow-92-boost-limiter.test.cjs:18:const SRC = fs.readFileSync(path.join(REPO, "additional/boost/ZentralBoost.uc.js"), "utf8");
+KEEP   tests/ow-92-boost-limiter.test.cjs:20:const SETTINGS = JSON.parse(fs.readFileSync(path.join(REPO, "additional/boost/settings.json"), "utf8"));
+KEEP   tests/ow-92-boost-limiter.test.cjs:30:    "zen.workspace.zentral.boost.enabled": true,
+KEEP   tests/ow-92-boost-limiter.test.cjs:31:    "zen.workspace.zentral.boost.startup_trim": false,
+KEEP   tests/ow-92-boost-limiter.test.cjs:93:  vm.runInContext(SRC, context, { filename: "ZentralBoost.uc.js" });
+KEEP   tests/ow-92-boost-limiter.test.cjs:95:  const api = win.ZentralBoost;
+KEEP   tests/ow-92-boost-limiter.test.cjs:179:  const on = boot({ prefs: { "zen.workspace.zentral.boost.limit_enabled": true }, readings: [100] });
+KEEP   tests/ow-92-boost-limiter.test.cjs:189:    prefs: { "zen.workspace.zentral.boost.limit_enabled": true, "zen.workspace.zentral.boost.limit_mb": 1000, "zen.workspace.zentral.boost.limit_mode": "soft" },
+KEEP   tests/ow-92-boost-limiter.test.cjs:214:      "zen.workspace.zentral.boost.limit_enabled": true,
+KEEP   tests/ow-92-boost-limiter.test.cjs:215:      "zen.workspace.zentral.boost.limit_mb": 1000,
+KEEP   tests/ow-92-boost-limiter.test.cjs:216:      "zen.workspace.zentral.boost.limit_mode": "hard",
+KEEP   tests/ow-92-boost-limiter.test.cjs:217:      "zen.workspace.zentral.boost.limit_target_pct": 85,
+KEEP   tests/ow-92-boost-limiter.test.cjs:218:      "zen.workspace.zentral.boost.limit_cooldown_s": 0,
+KEEP   tests/ow-92-boost-limiter.test.cjs:243:  h.store.set("zen.workspace.zentral.boost.limit_enabled", true);
+KEEP   tests/ow-92-boost-limiter.test.cjs:252:    "zen.workspace.zentral.boost.limit_enabled",
+KEEP   tests/ow-92-boost-limiter.test.cjs:253:    "zen.workspace.zentral.boost.limit_mb",
+KEEP   tests/ow-92-boost-limiter.test.cjs:254:    "zen.workspace.zentral.boost.limit_mode",
+KEEP   tests/ow-92-boost-limiter.test.cjs:255:    "zen.workspace.zentral.boost.limit_cooldown_s",
+KEEP   tests/ow-92-boost-limiter.test.cjs:256:    "zen.workspace.zentral.boost.limit_target_pct",
+KEEP   tests/ow-92-boost-limiter.test.cjs:263:  const defaults = Object.fromEntries(SETTINGS.schema.filter((x) => x.property.includes(".boost.limit_")).map((x) => [x.property, x.defaultValue]));
+KEEP   tests/ow-92-boost-limiter.test.cjs:264:  assert.equal(defaults["zen.workspace.zentral.boost.limit_enabled"], false, "off by default");
+KEEP   tests/ow-92-boost-limiter.test.cjs:265:  assert.equal(defaults["zen.workspace.zentral.boost.limit_mb"], 4096);
+KEEP   tests/ow-92-boost-limiter.test.cjs:266:  assert.equal(defaults["zen.workspace.zentral.boost.limit_mode"], "soft");
+KEEP   tests/ow-92-boost-limiter.test.cjs:267:  assert.equal(defaults["zen.workspace.zentral.boost.limit_cooldown_s"], 60);
+KEEP   tests/ow-92-boost-limiter.test.cjs:268:  assert.equal(defaults["zen.workspace.zentral.boost.limit_target_pct"], 85);
+KEEP   tests/ow-92-boost-limiter.test.cjs:273:  const readme = fs.readFileSync(path.join(REPO, "additional/boost/README.md"), "utf8");
+KEEP   tests/ow-92-boost-limiter.test.cjs:283:  console.log(`\now-92-boost-limiter (${passed} passed)`);
+KEEP   tests/ow-93-panel-throttle.test.cjs:18:const BOOST = fs.readFileSync(path.join(REPO, "additional/boost/ZentralBoost.uc.js"), "utf8");
+KEEP   tests/ow-93-panel-throttle.test.cjs:148:  // The mode is read off the record, which is what the tile menu and Boost both write.
+KEEP   tests/ow-94-game-mode-run.test.cjs:20:const BOOST_SRC = fs.readFileSync(path.join(REPO, "additional/boost/ZentralBoost.uc.js"), "utf8");
+KEEP   tests/ow-94-game-mode-run.test.cjs:52:    "zen.workspace.zentral.boost.enabled": true,
+KEEP   tests/ow-94-game-mode-run.test.cjs:53:    "zen.workspace.zentral.boost.startup_trim": false,
+KEEP   tests/ow-94-game-mode-run.test.cjs:138:  vm.runInContext(BOOST_SRC, context, { filename: "ZentralBoost.uc.js" });
+KEEP   tests/ow-94-game-mode-run.test.cjs:141:  const api = win.ZentralBoost;
+KEEP   tests/ow-94-game-mode-run.test.cjs:185:  const { api, browsers } = boot({ prefs: { "zen.workspace.zentral.boost.game_mode": true } });
+KEEP   tests/ow-94-game-mode-run.test.cjs:209:  const { api } = boot({ prefs: { "zen.workspace.zentral.boost.stronger_saver": true } });
+KEEP   tests/ow-94-game-mode.test.cjs:150:  const source = read("additional/boost/ZentralBoost.uc.js");
+KEEP   tests/ow-94-game-mode.test.cjs:158:  const source = read("additional/boost/ZentralBoost.uc.js");
+KEEP   tests/ow-94-game-mode.test.cjs:170:  const source = read("additional/boost/ZentralBoost.uc.js");
+KEEP   tests/ow-94-game-mode.test.cjs:180:  const settings = JSON.parse(read("additional/boost/settings.json"));
+KEEP   tests/ow-94-game-mode.test.cjs:183:    const item = byProp.get(`zen.workspace.zentral.boost.${name}`);
+KEEP   tests/ow-94-game-mode.test.cjs:190:  const source = read("additional/boost/ZentralBoost.uc.js");
+MOVE   tests/widgets-boost-card.test.cjs:2:/* OW-90, live: the Boost card in the fake sidebar.
+MOVE   tests/widgets-boost-card.test.cjs:19:  "zen.workspace.zentral.widgets.boost.enabled": true,
+MOVE   tests/widgets-boost-card.test.cjs:24:// A stand-in for `additional/boost/`: the card's only contract with it is `runLevel1`, `onChange` and `lastMB`.
+MOVE   tests/widgets-boost-card.test.cjs:25:function makeBoostModule({ freedMB = 240, beforeMB = 900 } = {}) {
+MOVE   tests/widgets-boost-card.test.cjs:85:  const boost = makeBoostModule();
+MOVE   tests/widgets-boost-card.test.cjs:86:  boost.lastValue = 512;
+MOVE   tests/widgets-boost-card.test.cjs:87:  h.window.ZentralBoost = boost;
+MOVE   tests/widgets-boost-card.test.cjs:90:  const card = api.getTray().children.find((el) => el.getAttribute("data-zw-widget") === "boost");
+MOVE   tests/widgets-boost-card.test.cjs:91:  assert.ok(card, "the Boost card is mounted");
+MOVE   tests/widgets-boost-card.test.cjs:92:  const value = card.querySelector(".zw-boost-value");
+MOVE   tests/widgets-boost-card.test.cjs:99:  const boost = makeBoostModule({ freedMB: 240, beforeMB: 900 });
+MOVE   tests/widgets-boost-card.test.cjs:100:  h.window.ZentralBoost = boost;
+MOVE   tests/widgets-boost-card.test.cjs:103:  const card = api.getTray().children.find((el) => el.getAttribute("data-zw-widget") === "boost");
+MOVE   tests/widgets-boost-card.test.cjs:104:  const body = card.querySelector(".zw-boost");
+MOVE   tests/widgets-boost-card.test.cjs:106:  assert.equal(boost.calls.runLevel1, 1, "one click, one pass");
+MOVE   tests/widgets-boost-card.test.cjs:109:  assert.equal(boost.calls.runLevel1, 1, "the card refuses a second run while one is in flight");
+MOVE   tests/widgets-boost-card.test.cjs:110:  boost.finishRun();
+MOVE   tests/widgets-boost-card.test.cjs:118:  assert.equal(body.querySelector(".zw-boost-value").textContent, "660 MB", "and the card shows the new reading");
+MOVE   tests/widgets-boost-card.test.cjs:125:  const boost = makeBoostModule();
+MOVE   tests/widgets-boost-card.test.cjs:126:  boost.state = () => ({ policy: true, undoSize: 0 });
+MOVE   tests/widgets-boost-card.test.cjs:127:  boost.calls.runLevel2 = 0;
+MOVE   tests/widgets-boost-card.test.cjs:128:  boost.runLevel2 = async () => { boost.calls.runLevel2 += 1; return { by: "level2", freedMB: 10, unloaded: { tabs: 3, panels: 0 } }; };
+MOVE   tests/widgets-boost-card.test.cjs:129:  boost.restore = () => ({ panels: 0, tabs: 0 });
+MOVE   tests/widgets-boost-card.test.cjs:130:  h.window.ZentralBoost = boost;
+MOVE   tests/widgets-boost-card.test.cjs:133:  const card = api.getTray().children.find((el) => el.getAttribute("data-zw-widget") === "boost");
+MOVE   tests/widgets-boost-card.test.cjs:134:  const body = card.querySelector(".zw-boost");
+MOVE   tests/widgets-boost-card.test.cjs:135:  const popup = body.querySelector(".zw-boost-popup");
+MOVE   tests/widgets-boost-card.test.cjs:136:  const arrow = body.querySelector(".zw-boost-menu-btn");
+MOVE   tests/widgets-boost-card.test.cjs:141:  const items = popup.querySelectorAll(".zw-boost-menu-item");
+MOVE   tests/widgets-boost-card.test.cjs:145:  assert.deepEqual(items.slice(0, 3).map((row) => row.getAttribute("data-zw-boost-level")), ["light", "deep", "game"]);
+MOVE   tests/widgets-boost-card.test.cjs:148:  assert.equal(items[2].getAttribute("data-zw-boost-action"), "game-mode", "OW-94's Level 3 toggle sits before Restore");
+MOVE   tests/widgets-boost-card.test.cjs:155:  assert.equal(boost.calls.runLevel2, 1, "the deep pass ran once");
+MOVE   tests/widgets-boost-card.test.cjs:159:  boost.state = () => ({ policy: true, undoSize: 3 });
+MOVE   tests/widgets-boost-card.test.cjs:161:  const after = popup.querySelectorAll(".zw-boost-menu-item");
+MOVE   tests/widgets-boost-card.test.cjs:172:  h.window.ZentralBoost = makeBoostModule();
+MOVE   tests/widgets-boost-card.test.cjs:175:  const card = api.getTray().children.find((el) => el.getAttribute("data-zw-widget") === "boost");
+MOVE   tests/widgets-boost-card.test.cjs:176:  const body = card.querySelector(".zw-boost");
+MOVE   tests/widgets-boost-card.test.cjs:177:  const popup = body.querySelector(".zw-boost-popup");
+MOVE   tests/widgets-boost-card.test.cjs:178:  fire(body.querySelector(".zw-boost-menu-btn"), "click");
+MOVE   tests/widgets-boost-card.test.cjs:186:  fire(body.querySelector(".zw-boost-menu-btn"), "click");
+MOVE   tests/widgets-boost-card.test.cjs:195:  const boost = makeBoostModule();
+MOVE   tests/widgets-boost-card.test.cjs:197:  boost.onLimiterEvent = (fn) => { limiterListeners.add(fn); return () => limiterListeners.delete(fn); };
+MOVE   tests/widgets-boost-card.test.cjs:198:  h.window.ZentralBoost = boost;
+MOVE   tests/widgets-boost-card.test.cjs:215:  const boost = makeBoostModule();
+MOVE   tests/widgets-boost-card.test.cjs:216:  h.window.ZentralBoost = boost;
+MOVE   tests/widgets-boost-card.test.cjs:219:  assert.equal(boost.listenerCount(), 1, "one subscription while the card is mounted");
+MOVE   tests/widgets-boost-card.test.cjs:222:  assert.equal(boost.listenerCount(), 0, "and none after the shell goes away");
+MOVE   tests/widgets-boost-card.test.cjs:227:  // No `window.ZentralBoost` at all: the card must draw a dash and refuse to run, never throw.
+MOVE   tests/widgets-boost-card.test.cjs:230:  const card = api.getTray().children.find((el) => el.getAttribute("data-zw-widget") === "boost");
+MOVE   tests/widgets-boost-card.test.cjs:232:  const body = card.querySelector(".zw-boost");
+MOVE   tests/widgets-boost-card.test.cjs:233:  assert.equal(body.querySelector(".zw-boost-value").textContent, "\u2014", "no reading is a dash");
+MOVE   tests/widgets-boost-card.test.cjs:242:  h.window.ZentralBoost = makeBoostModule();
+MOVE   tests/widgets-boost-card.test.cjs:246:  assert.deepEqual(ids, ["boost"], "only Boost, even with the old pref switched on");
+MOVE   tests/widgets-boost-card.test.cjs:252:  const boost = makeBoostModule();
+MOVE   tests/widgets-boost-card.test.cjs:253:  h.window.ZentralBoost = boost;
+MOVE   tests/widgets-boost-card.test.cjs:256:  const card = api.getTray().children.find((el) => el.getAttribute("data-zw-widget") === "boost");
+MOVE   tests/widgets-boost-card.test.cjs:257:  const body = card.querySelector(".zw-boost");
+MOVE   tests/widgets-boost-card.test.cjs:258:  const popup = body.querySelector(".zw-boost-popup");
+MOVE   tests/widgets-boost-card.test.cjs:259:  const arrow = body.querySelector(".zw-boost-menu-btn");
+MOVE   tests/widgets-boost-card.test.cjs:261:  const row = () => popup.querySelectorAll(".zw-boost-menu-item")[2];
+MOVE   tests/widgets-boost-card.test.cjs:262:  assert.equal(row().getAttribute("data-zw-boost-action"), "game-mode");
+MOVE   tests/widgets-boost-card.test.cjs:266:  assert.equal(boost.calls.setGameMode, 1, "the card asked the module to turn it on");
+MOVE   tests/widgets-boost-card.test.cjs:267:  assert.equal(boost.gameModeOn, true, "the module is the one holding the state");
+MOVE   tests/widgets-boost-card.test.cjs:276:  assert.equal(boost.calls.setGameMode, 2);
+MOVE   tests/widgets-boost-card.test.cjs:277:  assert.equal(boost.gameModeOn, false, "the second click turns it off");
+MOVE   tests/widgets-boost-card.test.cjs:289:  console.log(`\nPASS widgets-boost-card (${passed} tests)`);
+DELETE tests/widgets-clock-date.test.cjs:356:        // OW-90's Boost card ships on and would be the third child otherwise; this test is about the two time cards.
+DELETE tests/widgets-clock-date.test.cjs:357:        "zen.workspace.zentral.widgets.boost.enabled": false,
+DELETE tests/widgets-clock-timer.test.cjs:164:  // OW-90 moved this one number to the plan's four seconds for the Boost toast; the toast is shared, so the test
+MOVE   tests/widgets-language.test.cjs:117:  for (const key of ["clock.title", "date.title", "weather.title", "boost.title", "tray.label"]) {
+MOVE   tests/widgets-language.test.cjs:122:test("the Boost card's own words are translated through its options, so the pure part stays pure", () => {
+MOVE   tests/widgets-language.test.cjs:123:  // OW-90: the Status card is gone; its words went with it and Boost's arrive in both languages.
+MOVE   tests/widgets-language.test.cjs:125:  const items = c.boostMenuItems({ running: false, ...pl });
+MOVE   tests/widgets-language.test.cjs:126:  assert.equal(items.find((i) => i.id === "free-light").label, c.WIDGET_STRINGS.pl["boost.free"], "the light pass is Polish");
+MOVE   tests/widgets-language.test.cjs:127:  assert.equal(items.find((i) => i.id === "free-deep").label, c.WIDGET_STRINGS.pl["boost.deep"], "and so is the deep entry");
+MOVE   tests/widgets-language.test.cjs:128:  assert.equal(c.boostResultText({ freedMB: 120 }, pl), c.WIDGET_STRINGS.pl["boost.freed"].replace("{mb}", "120"),
+MOVE   tests/widgets-language.test.cjs:131:  assert.equal(c.boostResultText({ freedMB: 120 }), "Freed 120 MB");
+MOVE   tests/widgets-language.test.cjs:135:    assert.ok(!/^boost\./.test(key) || c.WIDGET_STRINGS.pl[key] !== c.WIDGET_STRINGS.en[key] || key === "boost.title",
+DELETE tests/widgets-no-dead-drag.test.cjs:31:  "zen.workspace.zentral.widgets.boost.enabled": false,
+DELETE tests/widgets-owner-reports.test.cjs:141:  // The Status card and its readings are gone: Boost owns the one memory number the browser can really report, and
+DELETE tests/widgets-owner-reports.test.cjs:142:  // `additional/boost/` owns the reading itself. What survives from OW-70 here is the card's own placement rule — a
+DELETE tests/widgets-owner-reports.test.cjs:146:    const defs = [{ id: "clock" }, { id: "date" }, { id: "weather" }, { id: "boost" }];
+DELETE tests/widgets-owner-reports.test.cjs:147:    assert.deepEqual(Array.from(c.orderedByIds(defs, ["boost", "clock"]), (d) => d.id), ["boost", "clock", "date", "weather"],
+DELETE tests/widgets-owner-reports.test.cjs:149:    assert.deepEqual(Array.from(c.orderedByIds(defs, ["nope", "weather"]), (d) => d.id), ["weather", "clock", "date", "boost"],
+DELETE tests/widgets-owner-reports.test.cjs:151:    assert.deepEqual(Array.from(c.orderedByIds(defs, []), (d) => d.id), ["clock", "date", "weather", "boost"],
+DELETE tests/widgets-owner-reports.test.cjs:153:    assert.deepEqual(Array.from(c.cleanWidgetOrder("clock, ,date;boost clock")), ["clock", "date", "boost"],
+DELETE tests/widgets-owner-reports.test.cjs:173:      "zen.workspace.zentral.widgets.boost.enabled": false,
+DELETE tests/widgets-shell.test.cjs:345:      "zen.workspace.zentral.widgets.boost.enabled": false,
+MOVE   tests/widgets-status.test.cjs:2:/* OW-90 tests: the Boost card, which replaced the Status card (the owner's words: "it replaces it").
+MOVE   tests/widgets-status.test.cjs:9: *     Boost on rather than silently losing the card;
+MOVE   tests/widgets-status.test.cjs:46:  assert.deepEqual(json(c.boostParts(412)), { mb: 412, text: "412 MB", level: "ok" });
+MOVE   tests/widgets-status.test.cjs:47:  assert.equal(c.boostParts(1410).text, "1.4 GB", "past a thousand it switches unit instead of showing 1410 MB");
+MOVE   tests/widgets-status.test.cjs:48:  assert.equal(c.boostParts(999).text, "999 MB", "the switch is at the point the number stops being readable");
+MOVE   tests/widgets-status.test.cjs:49:  assert.equal(c.boostParts(4096).level, "low", "a browser at four gigabytes is worth a colour");
+MOVE   tests/widgets-status.test.cjs:50:  assert.equal(c.boostParts(null), null, "no reading is no reading");
+MOVE   tests/widgets-status.test.cjs:51:  assert.equal(c.boostParts(undefined), null);
+MOVE   tests/widgets-status.test.cjs:52:  assert.equal(c.boostParts(0), null, "0 MB is never drawn as a real browser");
+MOVE   tests/widgets-status.test.cjs:53:  assert.equal(c.boostParts(NaN), null);
+MOVE   tests/widgets-status.test.cjs:57:  assert.deepEqual(json(c.resolveBoostClick({ available: true, running: false })), { action: "free", level: 1 });
+MOVE   tests/widgets-status.test.cjs:58:  const busy = c.resolveBoostClick({ available: true, running: true });
+MOVE   tests/widgets-status.test.cjs:61:  const missing = c.resolveBoostClick({ available: false });
+MOVE   tests/widgets-status.test.cjs:64:  assert.equal(c.resolveBoostClick({ available: true, enabled: false }).action, "none", "the kill switch is honoured");
+MOVE   tests/widgets-status.test.cjs:69:  const items = c.boostMenuItems({ running: false, canDeep: true });
+MOVE   tests/widgets-status.test.cjs:76:  const noPolicy = c.boostMenuItems({ running: false, canDeep: false });
+MOVE   tests/widgets-status.test.cjs:81:  const withUndo = c.boostMenuItems({ running: false, canDeep: true, undoSize: 4 });
+MOVE   tests/widgets-status.test.cjs:84:  const busy = c.boostMenuItems({ running: true, canDeep: true, undoSize: 4 });
+MOVE   tests/widgets-status.test.cjs:90:  const noGameMode = c.boostMenuItems({ running: false, canDeep: true, canGameMode: false });
+MOVE   tests/widgets-status.test.cjs:92:  const on = c.boostMenuItems({ running: false, canDeep: true, canGameMode: true, gameMode: true });
+MOVE   tests/widgets-status.test.cjs:96:  const off = c.boostMenuItems({ running: false, canDeep: true, canGameMode: true, gameMode: false });
+MOVE   tests/widgets-status.test.cjs:102:  const deep = c.boostResultText({ by: "level2", freedMB: 300, unloaded: { tabs: 7, panels: 2 } });
+MOVE   tests/widgets-status.test.cjs:104:  assert.equal(c.boostResultText({ by: "level2", freedMB: 0, unloaded: { tabs: 0, panels: 0 } }),
+MOVE   tests/widgets-status.test.cjs:106:  assert.equal(c.WIDGET_STRINGS.en["boost.restored"].replace("{count}", "3"), "Woke 3 panel(s)");
+MOVE   tests/widgets-status.test.cjs:110:  assert.equal(c.boostResultText({ freedMB: 220, beforeMB: 900, afterMB: 680 }), "Freed 220 MB");
+MOVE   tests/widgets-status.test.cjs:111:  assert.equal(c.boostResultText({ freedMB: 0 }), "Memory was already tidy", "nothing freed is a fact, not a failure");
+MOVE   tests/widgets-status.test.cjs:112:  assert.equal(c.boostResultText({ freedMB: null }), "Memory freed. This build cannot measure it.",
+MOVE   tests/widgets-status.test.cjs:114:  assert.equal(c.boostResultText(null), "Memory freed. This build cannot measure it.", "a failed run is never a crash");
+MOVE   tests/widgets-status.test.cjs:115:  assert.equal(c.boostResultText({ freedMB: 18.7 }), "Freed 19 MB", "a fraction is rounded once, at the edge");
+MOVE   tests/widgets-status.test.cjs:119:  // G10: the Boost card may be a literal registerWidget({ ... }) call or a named
+MOVE   tests/widgets-status.test.cjs:122:  const definitions = [...SRC.matchAll(/(?:registerWidget\(\{|const boostWidgetDefinition = \{)\n\s+id: "([a-z-]+)",/g)].map((m) => m[1]);
+MOVE   tests/widgets-status.test.cjs:123:  assert.equal(definitions.filter((id) => id === "boost").length, 1, "one Boost card");
+MOVE   tests/widgets-status.test.cjs:124:  assert.match(SRC, /if \(!trayTookBoost\) registerWidget\(boostWidgetDefinition\);|registerWidget\(\{\n\s+id: "boost",/);
+MOVE   tests/widgets-status.test.cjs:131:  const card = SRC.slice(SRC.indexOf("// ---- OW-90: the Boost card, which replaces the Status card"), SRC.indexOf("const onVisibilityOrResize"));
+MOVE   tests/widgets-status.test.cjs:134:    assert.equal(card.includes(forbidden), false, `${forbidden} belongs to additional/boost/, not to the card`);
+MOVE   tests/widgets-status.test.cjs:136:  assert.ok(/window\.ZentralBoost/.test(card), "the card calls the module's API");
+MOVE   tests/widgets-status.test.cjs:142:  const card = SRC.slice(SRC.indexOf("// ---- OW-90: the Boost card, which replaces the Status card"), SRC.indexOf("const onVisibilityOrResize"));
+MOVE   tests/widgets-status.test.cjs:145:  assert.ok(/if \(!boost\) return null;/.test(card), "and a run without it does nothing");
+MOVE   tests/widgets-status.test.cjs:146:  const parts = c.boostParts(undefined);
+MOVE   tests/widgets-status.test.cjs:151:  const pref = "zen.workspace.zentral.widgets.boost.enabled";
+MOVE   tests/widgets-status.test.cjs:154:  assert.equal(row.defaultValue, true, "Boost ships on — the plan's own default");
+MOVE   tests/widgets-status.test.cjs:172:  const meta = SETTINGS.settings["zen.workspace.zentral.widgets.boost.enabled"];
+MOVE   tests/widgets-status.test.cjs:174:  assert.equal(meta.section, "Boost", "the section names what it holds now");
+MOVE   tests/widgets-status.test.cjs:177:  assert.ok(LAYOUT.categories.some((cat) => cat.id === meta.category && cat.sections.some((s) => s.label === "Boost")),
+MOVE   tests/widgets-status.test.cjs:182:  assert.ok(CSS.includes("#zentral-sidebar-widgets .zw-boost {"), "the card has its own block");
+MOVE   tests/widgets-status.test.cjs:183:  assert.ok(/\.zw-boost-popup\b[\s\S]*\[hidden\]/.test(CSS) || CSS.includes(".zw-boost-popup[hidden]"), "hidden really hides");
+MOVE   tests/widgets-status.test.cjs:184:  assert.ok(CSS.includes('.zw-boost-menu-item[disabled]'), "a greyed entry looks greyed");
+MOVE   tests/widgets-status.test.cjs:187:  const block = CSS.slice(CSS.indexOf(".zw-boost {"), CSS.indexOf("/* ---- Built-in Timer widget"));
+MOVE   tests/widgets-status.test.cjs:194:console.log("\nPASS widgets-status (replaced by the Boost card, " + passed + " tests)");
+KEEP   tests/g1-panel-sleep.test.cjs:2:/* G1 — real panel sleep and wake. RED on the pre-G1 tree: Boost used to call
+KEEP   tests/g1-panel-sleep.test.cjs:5: * This suite boots the real ZentralBoost.uc.js in a fake window with the panel
+KEEP   tests/g1-panel-sleep.test.cjs:18:const BOOST_SRC = read("additional/boost/ZentralBoost.uc.js");
+KEEP   tests/g1-panel-sleep.test.cjs:71:function bootBoost({ tabs = [], records = [], browsers = [], prefs = {} } = {}) {
+KEEP   tests/g1-panel-sleep.test.cjs:73:    "zen.workspace.zentral.boost.enabled": true,
+KEEP   tests/g1-panel-sleep.test.cjs:74:    "zen.workspace.zentral.boost.startup_trim": false,
+KEEP   tests/g1-panel-sleep.test.cjs:159:  vm.runInContext(BOOST_SRC, context, { filename: "ZentralBoost.uc.js" });
+KEEP   tests/g1-panel-sleep.test.cjs:160:  assert.ok(registration?.init, "Boost registers a feature");
+KEEP   tests/g1-panel-sleep.test.cjs:162:  const api = win.ZentralBoost;
+KEEP   tests/g1-panel-sleep.test.cjs:187:  const h = bootBoost();
+KEEP   tests/g1-panel-sleep.test.cjs:198:  const h = bootBoost({ records: [r], browsers: [browserFor("whatsapp")] });
+KEEP   tests/g1-panel-sleep.test.cjs:211:  const h = bootBoost({ records: [r] });
+KEEP   tests/g1-panel-sleep.test.cjs:223:  const h = bootBoost({ records: [r], browsers: [browserFor("messenger")] });
+KEEP   tests/g1-panel-sleep.test.cjs:235:  const h = bootBoost({ records: [r], browsers: [browserFor("music")] });
+KEEP   tests/g1-panel-sleep.test.cjs:247:  const h1 = bootBoost({ records: [selected], browsers: [browserFor("selected")] });
+KEEP   tests/g1-panel-sleep.test.cjs:255:  const h2 = bootBoost({ records: [source], browsers: [browserFor("source")] });
+KEEP   tests/g1-panel-sleep.test.cjs:264:  const h = bootBoost({ records: [r] });
+KEEP   tests/g1-panel-sleep.test.cjs:275:  const h = bootBoost({
+KEEP   tests/g1-panel-sleep.test.cjs:302:  const h = bootBoost({
+KEEP   tests/g1-panel-sleep.test.cjs:320:  assert.doesNotMatch(BOOST_SRC, /setInterval\(/, "Boost keeps its one-shot timers only");
+KEEP   tests/g2-game-mode-planner.test.cjs:18:const BOOST_SRC = read("additional/boost/ZentralBoost.uc.js");
+KEEP   tests/g2-game-mode-planner.test.cjs:20:const SETTINGS = json("additional/boost/settings.json");
+KEEP   tests/g2-game-mode-planner.test.cjs:22:const STANDALONE_PREFS = json("additional/boost/preferences.json");
+KEEP   tests/g2-game-mode-planner.test.cjs:69:function bootBoost({ tabs = [], records = [], prefs = {}, addTab = true } = {}) {
+KEEP   tests/g2-game-mode-planner.test.cjs:71:    "zen.workspace.zentral.boost.enabled": true,
+KEEP   tests/g2-game-mode-planner.test.cjs:72:    "zen.workspace.zentral.boost.startup_trim": false,
+KEEP   tests/g2-game-mode-planner.test.cjs:132:  vm.runInContext(BOOST_SRC, context, { filename: "ZentralBoost.uc.js" });
+KEEP   tests/g2-game-mode-planner.test.cjs:135:    win, api: win.ZentralBoost, gBrowser, store, timers, unloadCalls, prefWrites,
+KEEP   tests/g2-game-mode-planner.test.cjs:137:    destroy: () => win.ZentralBoost.destroy(),
+KEEP   tests/g2-game-mode-planner.test.cjs:152:  const h = bootBoost();
+KEEP   tests/g2-game-mode-planner.test.cjs:161:  const h = bootBoost();
+KEEP   tests/g2-game-mode-planner.test.cjs:182:  const h = bootBoost();
+KEEP   tests/g2-game-mode-planner.test.cjs:186:  const parking = tab({ attrs: ["zentral-boost-parking"], url: "about:blank" });
+KEEP   tests/g2-game-mode-planner.test.cjs:215:  const h = bootBoost();
+KEEP   tests/g2-game-mode-planner.test.cjs:233:  const h = bootBoost();
+KEEP   tests/g2-game-mode-planner.test.cjs:257:  const h = bootBoost({
+KEEP   tests/g2-game-mode-planner.test.cjs:260:    prefs: { "zen.workspace.zentral.boost.game_keep_hosts": "b.example" },
+KEEP   tests/g2-game-mode-planner.test.cjs:280:  const h = bootBoost({
+KEEP   tests/g2-game-mode-planner.test.cjs:282:    prefs: { "zen.workspace.zentral.boost.game_park_selected": false },
+KEEP   tests/g2-game-mode-planner.test.cjs:290:  assert.equal(SETTINGS.schema.find((x) => x.property === "zen.workspace.zentral.boost.unload_pinned").defaultValue, false);
+KEEP   tests/g2-game-mode-planner.test.cjs:291:  assert.equal(SETTINGS.schema.find((x) => x.property === "zen.workspace.zentral.boost.stronger_saver").defaultValue, false);
+KEEP   tests/g2-game-mode-planner.test.cjs:296:    "zen.workspace.zentral.boost.game_keep_hosts",
+KEEP   tests/g2-game-mode-planner.test.cjs:297:    "zen.workspace.zentral.boost.game_park_selected",
+KEEP   tests/g2-game-mode-planner.test.cjs:301:    assert.ok(item, `${key} is owned by Boost`);
+KEEP   tests/g2-game-mode-planner.test.cjs:302:    assert.equal(SETTINGS.settings[key].category, "boost");
+KEEP   tests/g2-game-mode-planner.test.cjs:304:    assert.equal(SETTINGS.settings[key].owner, "boost");
+KEEP   tests/g3-session-snapshot.test.cjs:5: * Game Mode at all. This suite boots the real Boost module in a fake window.
+KEEP   tests/g3-session-snapshot.test.cjs:16:const BOOST_SRC = read("additional/boost/ZentralBoost.uc.js");
+KEEP   tests/g3-session-snapshot.test.cjs:63:function bootBoost({ tabs = [], records = [], browsers = [] } = {}) {
+KEEP   tests/g3-session-snapshot.test.cjs:65:    "zen.workspace.zentral.boost.enabled": true,
+KEEP   tests/g3-session-snapshot.test.cjs:66:    "zen.workspace.zentral.boost.startup_trim": false,
+KEEP   tests/g3-session-snapshot.test.cjs:131:  vm.runInContext(BOOST_SRC, context, { filename: "ZentralBoost.uc.js" });
+KEEP   tests/g3-session-snapshot.test.cjs:133:  const api = win.ZentralBoost;
+KEEP   tests/g3-session-snapshot.test.cjs:151:  const h = bootBoost();
+KEEP   tests/g3-session-snapshot.test.cjs:168:  const h = bootBoost({ tabs: [a, b, c, r.tab], records: [r] });
+KEEP   tests/g3-session-snapshot.test.cjs:200:  const h = bootBoost({ tabs: [r.tab], records: [r], browsers: [panelBrowserFor("whatsapp")] });
+KEEP   tests/g3-session-snapshot.test.cjs:220:  const h = bootBoost({ tabs: [a, b] });
+KEEP   tests/g3-session-snapshot.test.cjs:242:  const h = bootBoost({ tabs });
+KEEP   tests/g3-session-snapshot.test.cjs:257:  const h = bootBoost({ tabs: [a, b] });
+KEEP   tests/g3-session-snapshot.test.cjs:277:  const h = bootBoost();
+KEEP   tests/g4-selected-tab-parking.test.cjs:17:const BOOST_SRC = read("additional/boost/ZentralBoost.uc.js");
+KEEP   tests/g4-selected-tab-parking.test.cjs:19:const SETTINGS = json("additional/boost/settings.json");
+KEEP   tests/g4-selected-tab-parking.test.cjs:20:const PARKING_ATTR = "zentral-boost-parking";
+KEEP   tests/g4-selected-tab-parking.test.cjs:69:function bootBoost({
+KEEP   tests/g4-selected-tab-parking.test.cjs:75:    "zen.workspace.zentral.boost.enabled": true,
+KEEP   tests/g4-selected-tab-parking.test.cjs:76:    "zen.workspace.zentral.boost.startup_trim": false,
+KEEP   tests/g4-selected-tab-parking.test.cjs:112:      const tab = makeTab({ url, label: "Boost parking", lastAccessed: Date.now() });
+KEEP   tests/g4-selected-tab-parking.test.cjs:171:  vm.runInContext(BOOST_SRC, context, { filename: "ZentralBoost.uc.js" });
+KEEP   tests/g4-selected-tab-parking.test.cjs:173:  const api = win.ZentralBoost;
+KEEP   tests/g4-selected-tab-parking.test.cjs:194:  const h = bootBoost();
+KEEP   tests/g4-selected-tab-parking.test.cjs:198:  assert.match(BOOST_SRC, /const PARKING_ATTR = "zentral-boost-parking"/);
+KEEP   tests/g4-selected-tab-parking.test.cjs:206:  const h = bootBoost({ tabs: [original] });
+KEEP   tests/g4-selected-tab-parking.test.cjs:242:  const on = bootBoost({ tabs: [original] });
+KEEP   tests/g4-selected-tab-parking.test.cjs:256:  const off = bootBoost({
+KEEP   tests/g4-selected-tab-parking.test.cjs:258:    prefs: { "zen.workspace.zentral.boost.game_park_selected": false },
+KEEP   tests/g4-selected-tab-parking.test.cjs:266:  assert.equal(SETTINGS.schema.find((x) => x.property === "zen.workspace.zentral.boost.game_park_selected").defaultValue, true);
+KEEP   tests/g4-selected-tab-parking.test.cjs:271:  const noApi = bootBoost({ tabs: [makeTab({ url: "https://a/" })], browserApi: false });
+KEEP   tests/g4-selected-tab-parking.test.cjs:279:  const threw = bootBoost({ tabs: [makeTab({ url: "https://b/" })], addTabThrows: true });
+KEEP   tests/g4-selected-tab-parking.test.cjs:293:    const h = bootBoost({
+KEEP   tests/g4-selected-tab-parking.test.cjs:304:    assert.equal(h.removeTabCalls.length, 1, `${mode}: only Boost's parking tab is closed`);
+KEEP   tests/g4-selected-tab-parking.test.cjs:317:  const h = bootBoost({ tabs: [original] });
+KEEP   tests/g4-selected-tab-parking.test.cjs:338:  const h = bootBoost({ tabs: [original] });
+KEEP   tests/g4-selected-tab-parking.test.cjs:358:  const h = bootBoost({ tabs: [original, neighbour] });
+KEEP   tests/g4-selected-tab-parking.test.cjs:374:  const h = bootBoost({ tabs: [original] });
+KEEP   tests/g4-selected-tab-parking.test.cjs:379:    "the pure planner keeps Boost's own tab");
+KEEP   tests/g4-selected-tab-parking.test.cjs:388:  assert.match(BOOST_SRC, /isBoostParkingTab\(tab\) \|\| tab === parking\.pendingOriginal/);
+KEEP   tests/g5-restore-engine.test.cjs:18:const BOOST_SRC = read("additional/boost/ZentralBoost.uc.js");
+KEEP   tests/g5-restore-engine.test.cjs:21:const SETTINGS = json("additional/boost/settings.json");
+KEEP   tests/g5-restore-engine.test.cjs:23:const STANDALONE_PREFS = json("additional/boost/preferences.json");
+KEEP   tests/g5-restore-engine.test.cjs:100:function bootBoost({
+KEEP   tests/g5-restore-engine.test.cjs:105:    "zen.workspace.zentral.boost.enabled": true,
+KEEP   tests/g5-restore-engine.test.cjs:106:    "zen.workspace.zentral.boost.startup_trim": false,
+KEEP   tests/g5-restore-engine.test.cjs:133:      const tab = makeTab({ url, label: "Boost parking", lastAccessed: Date.now() });
+KEEP   tests/g5-restore-engine.test.cjs:211:  vm.runInContext(BOOST_SRC, context, { filename: "ZentralBoost.uc.js" });
+KEEP   tests/g5-restore-engine.test.cjs:213:  const api = win.ZentralBoost;
+KEEP   tests/g5-restore-engine.test.cjs:246:  const h = bootBoost({
+KEEP   tests/g5-restore-engine.test.cjs:256:  if (staggerMs != null) h.store.set("zen.workspace.zentral.boost.game_restore_stagger_ms", staggerMs);
+KEEP   tests/g5-restore-engine.test.cjs:268:  const h = bootBoost();
+KEEP   tests/g5-restore-engine.test.cjs:277:    "zen.workspace.zentral.boost.game_restore_tabs",
+KEEP   tests/g5-restore-engine.test.cjs:278:    "zen.workspace.zentral.boost.game_restore_recent_n",
+KEEP   tests/g5-restore-engine.test.cjs:279:    "zen.workspace.zentral.boost.game_restore_stagger_ms",
+KEEP   tests/g5-restore-engine.test.cjs:280:    "zen.workspace.zentral.boost.game_restore_on_exit",
+KEEP   tests/g5-restore-engine.test.cjs:284:    assert.ok(item, `${key} is owned by Boost`);
+KEEP   tests/g5-restore-engine.test.cjs:286:    assert.equal(SETTINGS.settings[key].owner, "boost");
+KEEP   tests/g5-restore-engine.test.cjs:298:  assert.equal(SETTINGS.schema.find((x) => x.property === "zen.workspace.zentral.boost.unload_pinned").defaultValue, false);
+KEEP   tests/g5-restore-engine.test.cjs:299:  assert.equal(SETTINGS.schema.find((x) => x.property === "zen.workspace.zentral.boost.stronger_saver").defaultValue, false);
+KEEP   tests/g5-restore-engine.test.cjs:310:  const h = bootBoost();
+KEEP   tests/g5-restore-engine.test.cjs:374:    "zen.workspace.zentral.boost.game_restore_tabs": "recent",
+KEEP   tests/g5-restore-engine.test.cjs:375:    "zen.workspace.zentral.boost.game_restore_recent_n": 2,
+KEEP   tests/g5-restore-engine.test.cjs:384:    "zen.workspace.zentral.boost.game_restore_tabs": "panels",
+KEEP   tests/g5-restore-engine.test.cjs:393:    "zen.workspace.zentral.boost.game_restore_tabs": "none",
+KEEP   tests/g5-restore-engine.test.cjs:449:  h.store.set("zen.workspace.zentral.boost.game_park_selected", false); // avoid a fresh parking tab
+KEEP   tests/g5-restore-engine.test.cjs:465:    const h = bootBoost({
+KEEP   tests/g5-restore-engine.test.cjs:468:        "zen.workspace.zentral.boost.game_park_selected": false,
+KEEP   tests/g5-restore-engine.test.cjs:469:        "zen.workspace.zentral.boost.game_restore_on_exit": policy,
+KEEP   tests/g5-restore-engine.test.cjs:470:        "zen.workspace.zentral.boost.game_restore_tabs": "all",
+KEEP   tests/g6-automatic-wake-guards.test.cjs:4: * RED on d16728b (the pre-G6 tree): the shared predicate, the Boost user-wake bookkeeping and the guards in the
+KEEP   tests/g6-automatic-wake-guards.test.cjs:15:const BOOST_SRC = read("additional/boost/ZentralBoost.uc.js");
+KEEP   tests/g6-automatic-wake-guards.test.cjs:88:    ZentralBoost: { gameModeState: () => ({ on: game }) },
+KEEP   tests/g6-automatic-wake-guards.test.cjs:127:    ZentralBoost: {
+KEEP   tests/g6-automatic-wake-guards.test.cjs:373:    ZentralBoost: { gameModeState: () => ({ on: game }) },
+KEEP   tests/g6-automatic-wake-guards.test.cjs:410:/* ---------------- Boost: real source in a VM, with a tab/window scope ---------------- */
+KEEP   tests/g6-automatic-wake-guards.test.cjs:475:function bootBoost({ tabs = [], records = [], prefs = {}, browsers = new Map() } = {}) {
+KEEP   tests/g6-automatic-wake-guards.test.cjs:478:    "zen.workspace.zentral.boost.enabled": true,
+KEEP   tests/g6-automatic-wake-guards.test.cjs:479:    "zen.workspace.zentral.boost.startup_trim": false,
+KEEP   tests/g6-automatic-wake-guards.test.cjs:501:      const tab = makeTab({ url, label: "Boost parking", lastAccessed: Date.now() });
+KEEP   tests/g6-automatic-wake-guards.test.cjs:556:        const restoreOwned = !automatic && Boolean(win.ZentralBoost?.isRestoreWake?.("panel", id));
+KEEP   tests/g6-automatic-wake-guards.test.cjs:560:          win.ZentralBoost?.noteUserWake?.("panel", id);
+KEEP   tests/g6-automatic-wake-guards.test.cjs:578:  vm.runInContext(BOOST_SRC, context, { filename: "ZentralBoost.uc.js" });
+KEEP   tests/g6-automatic-wake-guards.test.cjs:581:    api: win.ZentralBoost, win, gBrowser, allTabs, appBrowsers, panelWakeChecks, noteWakeCalls,
+KEEP   tests/g6-automatic-wake-guards.test.cjs:584:    destroy: () => win.ZentralBoost?.destroy?.(),
+KEEP   tests/g6-automatic-wake-guards.test.cjs:595:async function seedBoostSession() {
+KEEP   tests/g6-automatic-wake-guards.test.cjs:606:  const h = bootBoost({ tabs: [selected, ...ordinary, ...records.map((r) => r.tab)], records, browsers });
+KEEP   tests/g6-automatic-wake-guards.test.cjs:620:    assert.match(guard, /ZentralBoost\?\.gameModeState\?\.\(\)\.on/, `${name}: Game Mode is consulted`);
+KEEP   tests/g6-automatic-wake-guards.test.cjs:643:  assert.match(PANELS, /window\.ZentralBoost\?\.noteUserWake\?\.\("panel", id\)/);
+KEEP   tests/g6-automatic-wake-guards.test.cjs:644:  assert.doesNotMatch(BOOST_SRC, /setInterval\(/, "Boost itself still has no polling loop");
+KEEP   tests/g6-automatic-wake-guards.test.cjs:828:test("Boost forgets user-woken tabs and panels from the snapshot and the pending Restore queue", async () => {
+KEEP   tests/g6-automatic-wake-guards.test.cjs:829:  const control = await seedBoostSession();
+KEEP   tests/g6-automatic-wake-guards.test.cjs:834:  const { h } = await seedBoostSession();
+KEEP   tests/g6-automatic-wake-guards.test.cjs:853:  const { h } = await seedBoostSession();
+KEEP   tests/g6-automatic-wake-guards.test.cjs:867:  assert.equal(h.listenerCount("TabSelect"), 1, "Boost owns exactly one capture TabSelect listener");
+KEEP   tests/g6-automatic-wake-guards.test.cjs:881:  const { h } = await seedBoostSession();
+KEEP   tests/g6-automatic-wake-guards.test.cjs:885:    "the low-level loader can ask Boost whether this wake belongs to Restore");
+MOVE   tests/g7-game-mode-feedback.test.cjs:2:/* G7 — Game Mode feedback in BOTH Boost card owners.
+KEEP   tests/g7-game-mode-feedback.test.cjs:14:  createFakeStandaloneBoostHarness,
+KEEP   tests/g7-game-mode-feedback.test.cjs:15:  instrumentStandaloneBoostApi,
+KEEP   tests/g7-game-mode-feedback.test.cjs:21:const BOOST_SRC = read("additional/boost/ZentralBoost.uc.js");
+KEEP   tests/g7-game-mode-feedback.test.cjs:29:const README = read("additional/boost/README.md");
+MOVE   tests/g7-game-mode-feedback.test.cjs:60:function loadBoostCardCore() {
+MOVE   tests/g7-game-mode-feedback.test.cjs:63:  assert.ok(start >= 0 && end > start, "Boost owns the pure card-string block");
+MOVE   tests/g7-game-mode-feedback.test.cjs:65:    "\nreturn { strings: BOOST_WIDGET_STRINGS, text: boostWidgetText, preview: boostWidgetPreviewText," +
+MOVE   tests/g7-game-mode-feedback.test.cjs:66:    "feedback: boostWidgetFeedbackText, off: boostWidgetOffText, restoreLabel: boostWidgetRestoreLabel };")();
+MOVE   tests/g7-game-mode-feedback.test.cjs:69:const boostCore = loadBoostCardCore();
+MOVE   tests/g7-game-mode-feedback.test.cjs:83:  "zen.workspace.zentral.widgets.boost.enabled": true,
+MOVE   tests/g7-game-mode-feedback.test.cjs:86:function makeTrayBoost(options = {}) {
+KEEP   tests/g7-game-mode-feedback.test.cjs:91:  const boost = {
+KEEP   tests/g7-game-mode-feedback.test.cjs:112:        boost.emit(on
+KEEP   tests/g7-game-mode-feedback.test.cjs:113:          ? { action: "on", state: boost.gameModeState() }
+KEEP   tests/g7-game-mode-feedback.test.cjs:114:          : { action: "off", state: boost.gameModeState() });
+MOVE   tests/g7-game-mode-feedback.test.cjs:133:    boost.widgetText = (lang, key, params) => boostCore.text(lang, key, params);
+MOVE   tests/g7-game-mode-feedback.test.cjs:134:    boost.widgetPreviewText = (preview, lang) => boostCore.preview(preview, lang);
+MOVE   tests/g7-game-mode-feedback.test.cjs:135:    boost.widgetFeedbackText = (state, lang) => boostCore.feedback(state, lang);
+MOVE   tests/g7-game-mode-feedback.test.cjs:136:    boost.widgetOffText = (state, lang) => boostCore.off(state, lang);
+MOVE   tests/g7-game-mode-feedback.test.cjs:137:    boost.widgetRestoreLabel = (state, lang) => boostCore.restoreLabel(state, lang);
+KEEP   tests/g7-game-mode-feedback.test.cjs:139:  return boost;
+MOVE   tests/g7-game-mode-feedback.test.cjs:144:  const boost = makeTrayBoost(options);
+KEEP   tests/g7-game-mode-feedback.test.cjs:145:  harness.window.ZentralBoost = boost;
+MOVE   tests/g7-game-mode-feedback.test.cjs:148:  const card = api.getTray().children.find((el) => el.getAttribute("data-zw-widget") === "boost");
+MOVE   tests/g7-game-mode-feedback.test.cjs:149:  assert.ok(card, "one full-pack Boost card is mounted");
+MOVE   tests/g7-game-mode-feedback.test.cjs:150:  const body = card.querySelector(".zw-boost");
+KEEP   tests/g7-game-mode-feedback.test.cjs:154:    boost,
+MOVE   tests/g7-game-mode-feedback.test.cjs:157:    popup: body.querySelector(".zw-boost-popup"),
+MOVE   tests/g7-game-mode-feedback.test.cjs:158:    arrow: body.querySelector(".zw-boost-menu-btn"),
+MOVE   tests/g7-game-mode-feedback.test.cjs:160:    restoreRow: () => body.querySelector(".zw-boost-popup").querySelectorAll(".zw-boost-menu-item")[3],
+KEEP   tests/g7-game-mode-feedback.test.cjs:164:const bootStandalone = (options = {}) => createFakeStandaloneBoostHarness({
+KEEP   tests/g7-game-mode-feedback.test.cjs:166:  instrumentApi: (api, calls) => instrumentStandaloneBoostApi(api, calls, {
+KEEP   tests/g7-game-mode-feedback.test.cjs:176:test("Boost owns the G8 diagnostic shape, an event door and no new setting", () => {
+KEEP   tests/g7-game-mode-feedback.test.cjs:196:  assert.equal(boostCore.feedback(FEEDBACK_STATE, "en"), EN_FEEDBACK);
+MOVE   tests/g7-game-mode-feedback.test.cjs:197:  assert.equal(widgetsCore.boostGameModeFeedbackText(FEEDBACK_STATE), EN_FEEDBACK);
+KEEP   tests/g7-game-mode-feedback.test.cjs:198:  assert.equal(boostCore.feedback(FEEDBACK_STATE, "pl"), PL_FEEDBACK);
+MOVE   tests/g7-game-mode-feedback.test.cjs:199:  assert.equal(widgetsCore.boostGameModeFeedbackText(FEEDBACK_STATE, { language: "pl" }), PL_FEEDBACK);
+KEEP   tests/g7-game-mode-feedback.test.cjs:200:  assert.equal(boostCore.preview({ counts: { tabs: 2, panels: 1 } }, "en"), EN_PREVIEW);
+MOVE   tests/g7-game-mode-feedback.test.cjs:201:  assert.equal(widgetsCore.boostGameModePreviewText({ counts: { tabs: 2, panels: 1 } }), EN_PREVIEW);
+KEEP   tests/g7-game-mode-feedback.test.cjs:202:  assert.equal(boostCore.preview({ counts: { tabs: 2, panels: 1 } }, "pl"), PL_PREVIEW);
+MOVE   tests/g7-game-mode-feedback.test.cjs:203:  assert.equal(widgetsCore.boostGameModePreviewText({ counts: { tabs: 2, panels: 1 } }, { language: "pl" }), PL_PREVIEW);
+MOVE   tests/g7-game-mode-feedback.test.cjs:204:  assert.equal(widgetsCore.boostGameModeOffText(SNAPSHOT), EN_OFF);
+KEEP   tests/g7-game-mode-feedback.test.cjs:205:  assert.equal(boostCore.off(SNAPSHOT, "en"), EN_OFF);
+MOVE   tests/g7-game-mode-feedback.test.cjs:206:  assert.equal(widgetsCore.boostGameModeOffText(SNAPSHOT, { language: "pl" }), PL_OFF);
+KEEP   tests/g7-game-mode-feedback.test.cjs:207:  assert.equal(boostCore.off(SNAPSHOT, "pl"), PL_OFF);
+MOVE   tests/g7-game-mode-feedback.test.cjs:208:  assert.equal(widgetsCore.boostRestoreSnapshotLabel(SNAPSHOT), "Restore (1 apps, 2 tabs)");
+MOVE   tests/g7-game-mode-feedback.test.cjs:209:  assert.equal(widgetsCore.boostRestoreSnapshotLabel({ panels: 0, tabs: 0 }), "Nothing to restore yet");
+KEEP   tests/g7-game-mode-feedback.test.cjs:210:  for (const key of ["boost.gameFeedback", "boost.gamePreview", "boost.gameRestoreAction", "boost.restoreSnapshot"]) {
+MOVE   tests/g7-game-mode-feedback.test.cjs:217:  const withSnapshot = widgetsCore.boostMenuItems({ running: false, snapshot: SNAPSHOT, gameMode: { on: true } });
+MOVE   tests/g7-game-mode-feedback.test.cjs:222:  const empty = widgetsCore.boostMenuItems({ running: false, snapshot: { panels: 0, tabs: 0 } });
+MOVE   tests/g7-game-mode-feedback.test.cjs:227:  const legacy = widgetsCore.boostMenuItems({ running: false, undoSize: 3 });
+MOVE   tests/g7-game-mode-feedback.test.cjs:229:  const polish = widgetsCore.boostMenuItems({ running: false, snapshot: SNAPSHOT, language: "pl" });
+MOVE   tests/g7-game-mode-feedback.test.cjs:236:  const game = mount.popup.querySelectorAll(".zw-boost-menu-item")[2];
+MOVE   tests/g7-game-mode-feedback.test.cjs:238:  assert.equal(game.getAttribute("data-zw-boost-preview"), EN_PREVIEW);
+KEEP   tests/g7-game-mode-feedback.test.cjs:239:  assert.ok(mount.boost.calls.previewGameMode >= 1, "previewGameMode() is read on hover");
+KEEP   tests/g7-game-mode-feedback.test.cjs:242:  assert.equal(mount.boost.calls.setGameMode, 1);
+KEEP   tests/g7-game-mode-feedback.test.cjs:243:  assert.ok(mount.boost.calls.previewAtSet > 0, "the dry run precedes the ON switch");
+KEEP   tests/g7-game-mode-feedback.test.cjs:244:  assert.ok(mount.boost.calls.previewGameMode >= 2, "and is read again immediately before ON");
+KEEP   tests/g7-game-mode-feedback.test.cjs:247:  assert.equal(mount.boost.listeners.size, 1, "one Game Mode event subscription");
+MOVE   tests/g7-game-mode-feedback.test.cjs:249:  assert.equal(mount.boost.listeners.size, 0, "and it is released with the tray");
+KEEP   tests/g7-game-mode-feedback.test.cjs:254:  mount.boost.emit({ action: "on-settle", state: FEEDBACK_STATE });
+KEEP   tests/g7-game-mode-feedback.test.cjs:256:  mount.boost.emit({ action: "off", state: { snapshot: SNAPSHOT } });
+KEEP   tests/g7-game-mode-feedback.test.cjs:263:  assert.equal(mount.boost.calls.restoreSession, 1, "the action calls G5's Restore engine");
+KEEP   tests/g7-game-mode-feedback.test.cjs:267:  assert.equal(mount.boost.listeners.size, 0);
+KEEP   tests/g7-game-mode-feedback.test.cjs:308:  mount.boost.emit({ action: "on-settle", state: FEEDBACK_STATE });
+KEEP   tests/g7-game-mode-feedback.test.cjs:310:  mount.boost.emit({ action: "off", state: { snapshot: SNAPSHOT } });
+MOVE   tests/g7-game-mode-feedback.test.cjs:318:    WIDGET_SRC.indexOf("// ---- OW-90: the Boost card, which replaces the Status card"),
+MOVE   tests/g7-game-mode-feedback.test.cjs:321:  assert.match(WIDGET_SRC, /boostGameModeFeedbackText/);
+MOVE   tests/g7-game-mode-feedback.test.cjs:323:  assert.match(WIDGET_SRC, /boostFeedbackText: boostGameModeFeedbackText/);
+MOVE   tests/g7-game-mode-feedback.test.cjs:329:  assert.match(WIDGETS_BUNDLE, /boostGameModeFeedbackText/);
+KEEP   tests/g8-game-mode-cleanup.test.cjs:16:const BOOST_SRC = read("additional/boost/ZentralBoost.uc.js");
+KEEP   tests/g8-game-mode-cleanup.test.cjs:18:const PARKING_ATTR = "zentral-boost-parking";
+KEEP   tests/g8-game-mode-cleanup.test.cjs:91:function bootBoost({ tabs = [], records = [], prefs = {}, refuseUnload = false } = {}) {
+KEEP   tests/g8-game-mode-cleanup.test.cjs:94:    "zen.workspace.zentral.boost.enabled": true,
+KEEP   tests/g8-game-mode-cleanup.test.cjs:95:    "zen.workspace.zentral.boost.startup_trim": false,
+KEEP   tests/g8-game-mode-cleanup.test.cjs:126:      const tab = makeTab({ url, label: "Boost parking", lastAccessed: Date.now() });
+KEEP   tests/g8-game-mode-cleanup.test.cjs:214:  vm.runInContext(BOOST_SRC, context, { filename: "ZentralBoost.uc.js" });
+KEEP   tests/g8-game-mode-cleanup.test.cjs:216:  const api = win.ZentralBoost;
+KEEP   tests/g8-game-mode-cleanup.test.cjs:241:  const h = bootBoost({
+KEEP   tests/g8-game-mode-cleanup.test.cjs:249:test("G8 ships one plan-driven pass in both Boost sources, without a second generic saver path", () => {
+KEEP   tests/g8-game-mode-cleanup.test.cjs:298:    prefs: { "zen.workspace.zentral.boost.game_park_selected": false },
+KEEP   tests/g8-game-mode-cleanup.test.cjs:316:  const { h } = gameFixture({ prefs: { "zen.workspace.zentral.boost.game_park_selected": false } });
+KEEP   tests/g8-game-mode-cleanup.test.cjs:356:  const { h } = gameFixture({ prefs: { "zen.workspace.zentral.boost.game_park_selected": false } });
+KEEP   tests/g8-game-mode-cleanup.test.cjs:375:  const { h } = gameFixture({ prefs: { "zen.workspace.zentral.boost.game_park_selected": false } });
+KEEP   tests/g8-game-mode-cleanup.test.cjs:391:      "zen.workspace.zentral.boost.game_park_selected": false,
+KEEP   tests/g8-game-mode-cleanup.test.cjs:392:      "zen.workspace.zentral.boost.limit_enabled": true,
+KEEP   tests/g8-game-mode-cleanup.test.cjs:393:      "zen.workspace.zentral.boost.limit_mb": 1000,
+KEEP   tests/g8-game-mode-cleanup.test.cjs:394:      "zen.workspace.zentral.boost.limit_mode": "hard",
+KEEP   tests/g8-game-mode-cleanup.test.cjs:417:  const trimmed = bootBoost({ prefs: { "zen.workspace.zentral.boost.startup_trim": true } });
+KEEP   tests/g8-game-mode-cleanup.test.cjs:423:      "zen.workspace.zentral.boost.startup_trim": true,
+KEEP   tests/g8-game-mode-cleanup.test.cjs:424:      "zen.workspace.zentral.boost.game_mode": true,
+KEEP   tests/g8-game-mode-cleanup.test.cjs:425:      "zen.workspace.zentral.boost.game_park_selected": false,
+KEEP   tests/g8-game-mode-cleanup.test.cjs:442:  const plainHarness = bootBoost({ tabs: [quiet, plainRecord.tab], records: [plainRecord] });
+KEEP   tests/g8-game-mode-cleanup.test.cjs:451:  const stronger = bootBoost({
+KEEP   tests/g8-game-mode-cleanup.test.cjs:454:    prefs: { "zen.workspace.zentral.boost.stronger_saver": true },
+KEEP   tests/g9-game-mode-docs.test.cjs:13:const README = read("additional/boost/README.md");
+KEEP   tests/g9-game-mode-docs.test.cjs:14:const SCHEMA = json("additional/boost/settings.json");
+KEEP   tests/g9-game-mode-docs.test.cjs:17:const BOOST_PREFS = json("additional/boost/preferences.json");
+KEEP   tests/g9-game-mode-docs.test.cjs:27:test("the Boost README explains both sides of Game Mode, the exemptions, Restore and what is lost", () => {
+KEEP   tests/g9-game-mode-docs.test.cjs:44:  const game = row(SCHEMA.schema, "zen.workspace.zentral.boost.game_mode");
+KEEP   tests/g9-game-mode-docs.test.cjs:45:  const stronger = row(SCHEMA.schema, "zen.workspace.zentral.boost.stronger_saver");
+KEEP   tests/g9-game-mode-docs.test.cjs:46:  const restore = row(SCHEMA.schema, "zen.workspace.zentral.boost.game_restore_tabs");
+KEEP   tests/g9-game-mode-docs.test.cjs:58:    const game = row(rows, "zen.workspace.zentral.boost.game_mode");
+KEEP   tests/g9-game-mode-docs.test.cjs:59:    const stronger = row(rows, "zen.workspace.zentral.boost.stronger_saver");
+KEEP   tests/g9-game-mode-docs.test.cjs:70:  const boost = LAYOUT.categories.find((category) => category && category.id === "boost");
+KEEP   tests/g9-game-mode-docs.test.cjs:71:  assert.ok(boost, "the Boost category is declared");
+KEEP   tests/g9-game-mode-docs.test.cjs:72:  assert.match(boost.description, /Game Mode unloads tabs; unsaved page state is lost and a short reload is needed when you return\./);
+KEEP   tests/g9-game-mode-docs.test.cjs:74:    "zen.workspace.zentral.boost.game_mode",
+KEEP   tests/g9-game-mode-docs.test.cjs:75:    "zen.workspace.zentral.boost.stronger_saver",
+KEEP   tests/g9-game-mode-docs.test.cjs:76:    "zen.workspace.zentral.boost.game_keep_hosts",
+KEEP   tests/g9-game-mode-docs.test.cjs:77:    "zen.workspace.zentral.boost.game_park_selected",
+KEEP   tests/g9-game-mode-docs.test.cjs:78:    "zen.workspace.zentral.boost.game_restore_tabs",
+KEEP   tests/g9-game-mode-docs.test.cjs:79:    "zen.workspace.zentral.boost.game_restore_recent_n",
+KEEP   tests/g9-game-mode-docs.test.cjs:80:    "zen.workspace.zentral.boost.game_restore_stagger_ms",
+KEEP   tests/g9-game-mode-docs.test.cjs:81:    "zen.workspace.zentral.boost.game_restore_on_exit",
+KEEP   tests/r1-sleep-holders.test.cjs:6: * boots the real ZentralBoost.uc.js with a fake window and asserts the holders (`panelWas`/`tabWas`), the snapshot
+KEEP   tests/r1-sleep-holders.test.cjs:18:const BOOST_SRC = read("additional/boost/ZentralBoost.uc.js");
+KEEP   tests/r1-sleep-holders.test.cjs:20:const PARKING_ATTR = "zentral-boost-parking";
+KEEP   tests/r1-sleep-holders.test.cjs:112:function bootBoost({ tabs = [], records = [], prefs = {} } = {}) {
+KEEP   tests/r1-sleep-holders.test.cjs:115:    "zen.workspace.zentral.boost.enabled": true,
+KEEP   tests/r1-sleep-holders.test.cjs:116:    "zen.workspace.zentral.boost.startup_trim": false,
+KEEP   tests/r1-sleep-holders.test.cjs:117:    "zen.workspace.zentral.boost.game_park_selected": false,
+KEEP   tests/r1-sleep-holders.test.cjs:149:      const tab = makeTab({ url, label: "Boost parking", lastAccessed: Date.now() });
+KEEP   tests/r1-sleep-holders.test.cjs:228:  vm.runInContext(BOOST_SRC, context, { filename: "ZentralBoost.uc.js" });
+KEEP   tests/r1-sleep-holders.test.cjs:230:  const api = win.ZentralBoost;
+KEEP   tests/r1-sleep-holders.test.cjs:265:    const h = bootBoost({ records: [record] });
+KEEP   tests/r1-sleep-holders.test.cjs:277:  const h = bootBoost({ tabs: [selected, record.tab], records: [record] });
+KEEP   tests/r1-sleep-holders.test.cjs:297:  const h = bootBoost({ tabs: [selected, record.tab], records: [record] });
+KEEP   tests/r1-sleep-holders.test.cjs:317:  const h = bootBoost({ tabs: [selected, record.tab], records: [record] });
+KEEP   tests/r1-sleep-holders.test.cjs:337:  const h = bootBoost({ tabs: [selected, record.tab], records: [record] });
+KEEP   tests/r1-sleep-holders.test.cjs:354:  const h = bootBoost({ tabs: [selected, record.tab], records: [record] });
+KEEP   tests/r2-restore-holders.test.cjs:18:const BOOST_SRC = read("additional/boost/ZentralBoost.uc.js");
+KEEP   tests/r2-restore-holders.test.cjs:80:function bootBoost({ tabs = [], records = [], prefs = {} } = {}) {
+KEEP   tests/r2-restore-holders.test.cjs:82:    "zen.workspace.zentral.boost.enabled": true,
+KEEP   tests/r2-restore-holders.test.cjs:83:    "zen.workspace.zentral.boost.startup_trim": false,
+KEEP   tests/r2-restore-holders.test.cjs:84:    "zen.workspace.zentral.boost.game_park_selected": false,
+KEEP   tests/r2-restore-holders.test.cjs:120:      const tab = makeTab({ url, label: "Boost parking" });
+KEEP   tests/r2-restore-holders.test.cjs:188:  vm.runInContext(BOOST_SRC, context, { filename: "ZentralBoost.uc.js" });
+KEEP   tests/r2-restore-holders.test.cjs:190:  const api = win.ZentralBoost;
+KEEP   tests/r2-restore-holders.test.cjs:221:  const h = bootBoost({ tabs: [selected, arena.tab], records: [arena] });
+KEEP   tests/r2-restore-holders.test.cjs:238:  const h = bootBoost({ tabs: [selected, whatsapp.tab], records: [whatsapp] });
+KEEP   tests/r2-restore-holders.test.cjs:255:  const h = bootBoost({ tabs: [selected, messenger.tab], records: [messenger] });
+KEEP   tests/r2-restore-holders.test.cjs:273:  const h = bootBoost({ tabs: [selected, idle.tab], records: [idle] });
+KEEP   tests/r2-restore-holders.test.cjs:290:  const h = bootBoost({ tabs: [selected, arena.tab], records: [arena] });
+KEEP   tests/r2-restore-holders.test.cjs:320:  const h = bootBoost({ tabs, records });
+KEEP   tests/r2-restore-holders.test.cjs:345:  const h = bootBoost({ tabs: [selected] });
+KEEP   tests/r2-restore-holders.test.cjs:372:  const h = bootBoost({ tabs: [selected, tabOnly.tab, panelOnly.tab], records: [tabOnly, panelOnly] });
+KEEP   tests/r2-restore-holders.test.cjs:390:  const h = bootBoost({ tabs: [selected, arena.tab], records: [arena] });
+KEEP   tests/r2-restore-holders.test.cjs:414:    const h = bootBoost({ tabs: [selected, t1.tab, t2.tab, p.tab], records: [t1, t2, p] });
+MOVE   tests/r3-restore-counts.test.cjs:6: * `gameModeState().unloaded`. The old `boost.levelRestore` wording ("wakes sleeping panels; sleeping tabs reload on
+KEEP   tests/r3-restore-counts.test.cjs:18:const BOOST_SRC = read("additional/boost/ZentralBoost.uc.js");
+KEEP   tests/r3-restore-counts.test.cjs:73:function bootBoost({ tabs = [], records = [], prefs = {} } = {}) {
+KEEP   tests/r3-restore-counts.test.cjs:75:    "zen.workspace.zentral.boost.enabled": true,
+KEEP   tests/r3-restore-counts.test.cjs:76:    "zen.workspace.zentral.boost.startup_trim": false,
+KEEP   tests/r3-restore-counts.test.cjs:77:    "zen.workspace.zentral.boost.game_park_selected": false,
+KEEP   tests/r3-restore-counts.test.cjs:99:      const tab = makeTab({ url, label: "Boost parking" });
+KEEP   tests/r3-restore-counts.test.cjs:159:  vm.runInContext(BOOST_SRC, context, { filename: "ZentralBoost.uc.js" });
+KEEP   tests/r3-restore-counts.test.cjs:163:    api: win.ZentralBoost,
+KEEP   tests/r3-restore-counts.test.cjs:164:    destroy: () => win.ZentralBoost.destroy(),
+KEEP   tests/r3-restore-counts.test.cjs:181:  const h = bootBoost({ tabs: [selected, tabOnly.tab, panelOnly.tab], records: [tabOnly, panelOnly] });
+KEEP   tests/r3-restore-counts.test.cjs:201:    return bootBoost({
+KEEP   tests/r3-restore-counts.test.cjs:231:  const h = bootBoost({ tabs: [selected, tabOnly.tab, panelOnly.tab], records: [tabOnly, panelOnly] });
+MOVE   tests/r3-restore-counts.test.cjs:240:  assert.match(WIDGETS_SRC, /"boost\.restoreSnapshot": "Restore \(\{panels\} apps, \{tabs\} tabs\)"/);
+MOVE   tests/r3-restore-counts.test.cjs:241:  assert.match(WIDGETS_SRC, /"boost\.restoreSnapshot": "Przywr\\u00f3\\u0107 \(\{panels\} aplikacji, \{tabs\} kart\)"/);
+MOVE   tests/r3-restore-counts.test.cjs:242:  assert.match(WIDGETS_BUNDLE, /"boost\.restoreSnapshot": "Restore \(\{panels\} apps, \{tabs\} tabs\)"/);
+MOVE   tests/r3-restore-counts.test.cjs:244:  assert.match(WIDGETS_SRC, /const restoreLabel = snapshot\n\s+\? \(snapshot\.total \? widgetText\(lang, "boost\.restoreSnapshot", \{ panels: snapshot\.panels, tabs: snapshot\.tabs \}\)/);
+MOVE   tests/r3-restore-counts.test.cjs:248:  const h = bootBoost();
+MOVE   tests/r3-restore-counts.test.cjs:257:    // The Boost-owned helper is the single source; assert it exists and is event-driven, never a second path.
+MOVE   tests/r3-restore-counts.test.cjs:258:    assert.match(BOOST_SRC, /function boostWidgetOffText\(/);
+MOVE   tests/r3-restore-counts.test.cjs:260:  assert.match(WIDGETS_SRC, /"boost\.gameFeedbackOff": "Game Mode off"/);
+MOVE   tests/r3-restore-counts.test.cjs:261:  assert.match(WIDGETS_SRC, /"boost\.gameFeedbackOff": "Tryb gry wy\\u0142\\u0105czony"/);
+MOVE   tests/r3-restore-counts.test.cjs:264:test("boost.levelRestore describes the real behaviour in both languages", () => {
+MOVE   tests/r3-restore-counts.test.cjs:265:  assert.match(WIDGETS_SRC, /"boost\.levelRestore": "Restore: reloads what was unloaded - panels as panels, tabs as tabs\."/);
+MOVE   tests/r3-restore-counts.test.cjs:266:  assert.match(WIDGETS_SRC, /"boost\.levelRestore": "Przywróć: wczytuje to, co zostało uśpione \\u2014 panele jako panele, karty jako karty\."/);
+MOVE   tests/r3-restore-counts.test.cjs:269:  assert.match(WIDGETS_BUNDLE, /"boost\.levelRestore": "Restore: reloads what was unloaded/);
+MOVE   tests/r3-restore-counts.test.cjs:270:  assert.match(WIDGETS_SRC, /"boost\.later": "Boost levels: Light, Deep, Game Mode and Restore"/);
+MOVE   tests/r3-restore-counts.test.cjs:271:  assert.match(WIDGETS_SRC, /"boost\.later": "Poziomy Boost: Lekko, Głęboko, Tryb gry i Przywróć"/);
+MOVE   tests/r3-restore-counts.test.cjs:272:  assert.match(WIDGETS_SRC, /"boost\.levels": "Boost levels and Restore"/);
+MOVE   tests/r3-restore-counts.test.cjs:273:  assert.match(WIDGETS_SRC, /"boost\.levels": "Poziomy Boost i Przywróć"/);
+MOVE   tests/r3-restore-counts.test.cjs:276:test("the Boost README documents the holders table and the panels-profile rule", () => {
+MOVE   tests/r3-restore-counts.test.cjs:277:  const README = read("additional/boost/README.md");
+KEEP   tests/r4-restore-holder-spec.test.cjs:9:const { bootBoost, makeTab, makeRecord, read, BOOST_SRC } = require("./helpers/fake-boost-holders-harness.cjs");
+KEEP   tests/r4-restore-holder-spec.test.cjs:25:  const h = bootBoost({ tabs: [selected, arena.tab], records: [arena] });
+KEEP   tests/r4-restore-holder-spec.test.cjs:45:  const h = bootBoost({ tabs: [selected, whatsapp.tab], records: [whatsapp] });
+KEEP   tests/r4-restore-holder-spec.test.cjs:65:  const h = bootBoost({ tabs: [selected, messenger.tab], records: [messenger] });
+KEEP   tests/r4-restore-holder-spec.test.cjs:86:  const h = bootBoost({ tabs: [selected, idle.tab], records: [idle] });
+KEEP   tests/r4-restore-holder-spec.test.cjs:114:  const h = bootBoost({ tabs, records });
+KEEP   tests/r4-restore-holder-spec.test.cjs:129:  const h = bootBoost();
+KEEP   tests/r4-restore-holder-spec.test.cjs:146:  const h = bootBoost({ tabs: [selected, tabOnly.tab, panelOnly.tab], records: [tabOnly, panelOnly] });
+KEEP   tests/r4-restore-holder-spec.test.cjs:164:  const h = bootBoost({ tabs: [selected, arena.tab], records: [arena] });
+KEEP   tests/r4-restore-holder-spec.test.cjs:184:  const h = bootBoost({ tabs: [selected, tabOnly.tab, panelOnly.tab], records: [tabOnly, panelOnly] });
+KEEP   tests/r4-restore-holder-spec.test.cjs:208:    const h = bootBoost({ tabs: [selected, old.tab, fresh.tab, panel.tab], records: [old, fresh, panel] });
+KEEP   tests/r5-restore-owner-gates.test.cjs:17:const README = read("additional/boost/README.md");
+KEEP   tests/r5-restore-owner-gates.test.cjs:26:  assert.match(HANDOFF, /Services\.wm\.getMostRecentWindow\("navigator:browser"\)\.ZentralBoost\.gameModeState\(\)/);
+KEEP   tests/r5-restore-owner-gates.test.cjs:68:  const BOOST = read("additional/boost/ZentralBoost.uc.js");
+KEEP   tests/settings-catalog-coverage.test.cjs:5: * descriptors but not additional/boost/settings.json: all of Boost's root
+KEEP   tests/settings-catalog-coverage.test.cjs:72:test("every owner schema is loaded by the settings catalog (Boost included)", () => {
+KEEP   tests/settings-catalog-coverage.test.cjs:79:  assert.ok(descriptors.includes("additional/boost/settings.json"));
+KEEP   tests/settings-catalog-coverage.test.cjs:86:test("the consistency checker fails on the old tree with the Boost descriptor removed", () => {
+KEEP   tests/settings-catalog-coverage.test.cjs:90:  const withoutBoost = source.replace(
+KEEP   tests/settings-catalog-coverage.test.cjs:91:    /      \{\n        \/\/ G11:[\s\S]*?owner: "boost",\n        file: "additional\/boost\/settings\.json",\n      \},\n/,
+KEEP   tests/settings-catalog-coverage.test.cjs:94:  assert.notEqual(withoutBoost, source, "fixture removed the boost descriptor");
+KEEP   tests/settings-catalog-coverage.test.cjs:95:  fs.writeFileSync(catalogFile, withoutBoost);
+KEEP   tests/settings-catalog-coverage.test.cjs:98:    errors.some((e) => e.includes("additional/boost/settings.json") && e.includes("catalog")),
+KEEP   tests/settings-catalog-coverage.test.cjs:103:  assert.match(red.stdout, /coverage: settings catalog does not load additional\/boost\/settings\.json/);
+KEEP   tests/settings-catalog-coverage.test.cjs:139:test("every Boost setting is generated, placed and visible in the main settings window", () => {
+KEEP   tests/settings-catalog-coverage.test.cjs:140:  const boost = json("additional/boost/settings.json");
+KEEP   tests/settings-catalog-coverage.test.cjs:143:  const category = layout.categories.find((c) => c.id === "boost");
+KEEP   tests/settings-catalog-coverage.test.cjs:144:  assert.ok(category, "layout declares the boost category");
+KEEP   tests/settings-catalog-coverage.test.cjs:147:    assert.ok(boost.categories[0].sections.some((s) => s.label === section), `boost declares ${section}`);
+KEEP   tests/settings-catalog-coverage.test.cjs:149:  assert.ok(boost.schema.length >= 11, "Boost's original 11 settings are still there");
+KEEP   tests/settings-catalog-coverage.test.cjs:150:  assert.equal(boost.schema.length, Object.keys(boost.settings).length, "every row is placed");
+KEEP   tests/settings-catalog-coverage.test.cjs:151:  for (const item of boost.schema) {
+KEEP   tests/settings-catalog-coverage.test.cjs:152:    assert.deepEqual(boost.settings[item.property]?.owner, "boost");
+KEEP   tests/settings-catalog-coverage.test.cjs:153:    assert.equal(boost.settings[item.property]?.category, "boost");
+KEEP   tests/settings-catalog-coverage.test.cjs:163:  rootPrefs.push({ property: "zen.workspace.zentral.boost.orphan", label: "Orphan", type: "checkbox", defaultValue: false });
+KEEP   tests/settings-catalog-coverage.test.cjs:166:    checkCoverage(f.dir).some((e) => e.includes("zen.workspace.zentral.boost.orphan")),
+KEEP   tests/settings-catalog-coverage.test.cjs:171:  const boostPrefsFile = "additional/boost/preferences.json";
+KEEP   tests/settings-catalog-coverage.test.cjs:172:  const boostPrefs = JSON.parse(read(boostPrefsFile));
+KEEP   tests/settings-catalog-coverage.test.cjs:173:  f.put(boostPrefsFile, JSON.stringify(boostPrefs.slice(1), null, 2) + "\n");
+KEEP   tests/source-integrity.test.cjs:6: * "green" while `additional/boost/ZentralBoost.uc.js` started with a literal `<<<<<<< HEAD` line. In the browser
+KEEP   tests/source-integrity.test.cjs:8: * sees `Memory Boost — FAILED` with only the loader frame in the details. Every other feature kept working, which
+KEEP   tests/source-integrity.test.cjs:93:  assert.ok(paths.includes("additional/boost/ZentralBoost.uc.js"), "the Boost source stays in the catalog");
+KEEP   loader/ZentralCatalog.js:35: * additional/boost/ZentralBoost.uc.js; additional/tabs/startup/ZentralStartup.uc.js;
+KEEP   loader/ZentralCatalog.js:247:        id: "boost",
+KEEP   loader/ZentralCatalog.js:248:        name: "Memory Boost",
+KEEP   loader/ZentralCatalog.js:249:        file: "additional/boost/ZentralBoost.uc.js",
+KEEP   loader/ZentralPerformanceSwitch.js:3://   ZentralBoost, which is what turns it on and off. Owned by `additional/boost/ZentralBoost.uc.js`, embedded in its
+KEEP   loader/ZentralPerformanceSwitch.js:56:      // `toggle()` is what the Boost switch and the shortcut call: both want "the other state", not "true".
+KEEP   loader/ZentralRuntime.js:2928:  // OW-91: one tab policy for every module that unloads a tab (TabUnload and Boost). It is a plain component, so a
+KEEP   loader/ZentralRuntime.js:2977:  // B7/OW-94: the panel layer, for a module that is not a part whose context it is (Boost reads it to put panel
+KEEP   loader/ZentralTabPolicy.js:8:// OW-91 (plan B4.1): TabUnload and Boost both need to know which tabs are safe to unload. Keeping two copies was how
+KEEP   loader/ZentralTabPolicy.js:10:// The reason string is part of the contract: a caller shows it (`boost.state()`), a test asserts it, and a future
+KEEP   loader/ZentralTabPolicy.js:115:   *   - `isPanelRecord`   (bool) this tab backs an Essential-panel record (Boost's deep pass knows the record set)
+KEEP   loader/ZentralTabPolicy.js:143:    // consent it is refused with its own named reason, so a `keepPinned` pref can never make Boost's TAB loop
+KEEP   loader/numeric-prefs.json:577:    "key": "zen.workspace.zentral.boost.limit_mb",
+KEEP   loader/numeric-prefs.json:578:    "text": "zen.workspace.zentral.boost.limit_mb_text",
+KEEP   loader/numeric-prefs.json:584:    "key": "zen.workspace.zentral.boost.limit_cooldown_s",
+KEEP   loader/numeric-prefs.json:585:    "text": "zen.workspace.zentral.boost.limit_cooldown_s_text",
+KEEP   loader/numeric-prefs.json:591:    "key": "zen.workspace.zentral.boost.limit_target_pct",
+KEEP   loader/numeric-prefs.json:592:    "text": "zen.workspace.zentral.boost.limit_target_pct_text",
+KEEP   loader/numeric-prefs.json:598:    "key": "zen.workspace.zentral.boost.game_restore_recent_n",
+KEEP   loader/numeric-prefs.json:599:    "text": "zen.workspace.zentral.boost.game_restore_recent_n_text",
+KEEP   loader/numeric-prefs.json:605:    "key": "zen.workspace.zentral.boost.game_restore_stagger_ms",
+KEEP   loader/numeric-prefs.json:606:    "text": "zen.workspace.zentral.boost.game_restore_stagger_ms_text",
+````
+
+## Boost-widget follow-up W2 — shared Boost-owned card source (2026-11-21)
+
+W2 is complete on this branch. The one card source is now `additional/boost/ZentralBoostWidget.js`; the standalone Boost package embeds it, while the full-pack catalog preloads that same source and the Boost-owned CSS. The card uses only the small loader adapter (document/window, sidebar rect/hover fallback, lifecycle timers/listeners, host-unload callback) and Boost's own API. It no longer probes or calls a Widgets API. The Boost-owned EN/PL table carries the newer level descriptions, G7 feedback, snapshot Restore wording/counts, skipped-result line and limiter notices, plus standalone card labels. CSS selectors are `zbw-*`.
+
+W2 validation: `tests/boost-standalone-widget.test.cjs` 11/11, `tests/ow-121-boost-ux.test.cjs` 6/6, `tests/g7-game-mode-feedback.test.cjs` 10/10, `tests/source-integrity.test.cjs` 3/3; `node tools/build-standalone.cjs --keep-version` succeeded, and the Boost test's `--check` + settings consistency checks passed. No real-browser checks or screenshots have been done.
+
+## Boost-widget follow-up W3 — shared safe mount and full-pack flow placement (2026-11-21)
+
+W3 is complete. `loader/ZentralSidebarMount.js` is the pure shared safe selector: it follows the Widgets mount priority (media-controls toolbar, bottom buttons, then the visible tabs host), preserves the video-player/anchor adjacency invariant, and has safe video/sidebar fallbacks. Both standalone manifests list it as a `sharedSource`; the full-pack catalog loads it for Widgets and Boost, and Widgets delegates its target selection to the shared helper.
+
+The shared Boost card now mounts as an in-flow `#zentral-boost-widget` after the Widgets tray and before bottom chrome when a safe target exists. It retains the standalone hover-card/anchor only when no safe in-flow target exists. A mount-host-only `MutationObserver` (`childList: true`, no subtree/attribute observation) and an owned, zero-delay coalescing timer re-seat the tile after native anchor/tray changes; the tile's own insertion is ignored. Teardown disconnects the observer and releases timers, listeners, subscriptions, card DOM and fallback DOM. Hidden/compact sidebar styling is CSS-only; window/document visibility and the enabled preference release/restore active flow sampling.
+
+W3 validation on the latest source/generated output: `tests/boost-standalone-widget.test.cjs` 15/15; `tests/standalone.test.cjs` 98 passed; G7 feedback 10/10; source integrity 3/3; `node tools/build-standalone.cjs --check` and `node tools/check-settings-consistency.cjs` passed; `node tests/run-all.cjs` passed 312/312, 0 failed. The full suite's expected failure-injection diagnostics are printed on stderr, but the command exited successfully. No Zen/Sine live check or screenshot is claimed. W3 is committed separately from W4.
+
+## Boost-widget follow-up W4 — remove the duplicate card from Widgets (2026-11-21)
+
+W4 is implemented. The Widgets source now owns no Boost card/helpers, handoff, EN/PL Boost strings, Boost toggle/default, or retired Status-to-Boost migration. Its CSS, README bullet, schema/metadata, standalone order and Widgets category layout row are removed; the generic tray API and unrelated widgets remain. `extension/settings/layout.json`, `additional/widgets/settings.json`, `additional/widgets/standalone.json`, and the generated root/Widgets `preferences.json` no longer declare `zen.workspace.zentral.widgets.boost.enabled`. This removes it from the shipped catalog, not from a user's existing profile; W5 must still read the saved legacy value once and leave that old user pref untouched.
+
+Rebuilt the Widgets standalone package and generated preferences; the Boost standalone package was also regenerated after the shared loader-comment cleanup. A source grep found no Boost/card/old-toggle implementation references in `additional/widgets/`; the retired `zen.workspace.zentral.widgets.boost.enabled` key is absent from both settings schemas/layout and the generated preference catalogs. Boost's own category and `zen.workspace.zentral.boost.*` preferences correctly remain. `ow-127-widget-space-priority` stays generic and passed. The tests that formerly loaded Widgets' Boost helpers now use Boost's `widgetMenu`/strings (`ow-115`) or run the Boost-owned generated card against ProcInfo bytes (`ow-118`).
+
+W4 validation: `node tests/run-all.cjs` — **310/310 test files passed, 0 failed** (397 s combined runtime; one isolated Agenda perf guard recovered on the runner's built-in retry). The suite prints expected failure-injection diagnostics on stderr. Focused suites also passed: Boost widget 15/15, OW-121 5/5, G7 9/9, R3 6/6, OW-115 5/5, OW-118 4/4, OW-110 8/8, OW-108, OW-109 (5 unit + 1 live integration), OW-127 6/6, source integrity 3/3, standalone lifecycle 98, Clock/Date 6, Clock/Timer 10, Widgets language 7, owner reports 11, shell 7, no-dead-drag 5. Build/settings/layout checks and `git diff --check` passed after regenerating the packages.
+
+### W4 test disposition
+
+- **Deleted:** `tests/widgets-boost-card.test.cjs`, `tests/widgets-status.test.cjs` (Widgets-only card duplicates; Boost behavior is covered under Boost ownership).
+- **Migrated to Boost ownership:** `tests/ow-121-boost-ux.test.cjs`, `tests/g7-game-mode-feedback.test.cjs`, `tests/r3-restore-counts.test.cjs`; `tests/ow-115-boost-skipped.test.cjs` now checks Boost's menu API and EN/PL strings; `tests/ow-118-boost-procinfo-bytes.test.cjs` now checks the real Boost card display. `tests/ow-110-boost-audit.test.cjs` no longer asserts Widgets-card sampling/listeners.
+- **Retained as generic Widgets coverage:** `widgets-language` (Boost-only case removed), `widgets-shell`, `widgets-owner-reports`, `widgets-no-dead-drag`, `widgets-clock-date`, `widgets-clock-timer`, `ow-127-widget-space-priority`, plus all other generic Widgets suites. Old Widgets-toggle fixtures were removed from OW-108/109 and generic suites; their test intent stays in the owning/generic domain.
+
+### Boost widget real-browser owner gates — all OPEN
+
+No live Zen/Sine checks or screenshots are available. The owner must perform these checks and attach screenshots before they can be marked complete:
+
+1. **Full pack and space:** Boost appears directly below the Widgets tray and above media/bottom buttons; no overlap; narrow the window/open many tabs and confirm the tray gives up space first while Boost remains visible.
+2. **Video player:** with the sidebar video player visible, confirm no overlap and unchanged player behavior.
+3. **Settings and migration:** Boost's widget toggle is in the Memory category; OFF hides the tile; Widgets has no Boost toggle; a previously saved OFF value stays OFF after upgrade.
+4. **Actions and feedback:** Light, Deep, Game Mode and Restore work from the tile, with their toasts beside it.
+5. **Standalone installs:** Boost-only installation shows the tile; Widgets-only installation has no Boost element.
+
+W5–W7 completion and current validation are recorded below. Keep all five real-browser owner gates open until the owner supplies the required screenshots and evidence.
+
+## Boost-widget follow-up W5 — one-time legacy preference migration (2026-11-21)
+
+W5 is complete. Boost now owns the only widget visibility setting, `zen.workspace.zentral.boost.widget_enabled` (default `true`), and displays it in its Memory settings. On startup, Boost copies a saved `zen.workspace.zentral.widgets.boost.enabled` value only if the new preference has no user value. An existing new value wins, including explicit `false`; when neither has a value, the effective default is `true`. The old pref is never cleared, rewritten or exposed as a Widgets control. The retired key is declared as a read-only external pref for the standalone Boost package.
+
+Validation: `tests/w5-widget-pref-migration.test.cjs` passed 4/4; shared Boost widget 15/15; settings/catalog checks, standalone package check, layout-order check, syntax and source-integrity checks passed. The generated Boost bundle was rebuilt after the widget lifecycle changes. A full-suite run after W5 passed 311/311 test files.
+
+## Boost-widget follow-up W6 — coexistence contract tests (2026-11-21)
+
+Added `tests/boost-widget-coexistence.test.cjs`. Its 12 cases exercise: full-pack tray/card order; standalone Boost-only and Widgets-only behavior; both standalone load orders; Widgets tray disablement; `widget_enabled=false` teardown; CSS-only hidden/compact states; video-player/anchor adjacency; Boost reload and destroy cleanup; the Widgets free-area metric with a 30 px in-flow tile; static module independence; and no `setInterval` in either implementation. Both standalone load orders end in the same `[tray, Boost tile, media/bottom chrome]` order as the full pack. The Boost-first fake-DOM case explicitly delivers the child-list observer record because that harness does not synthesize native MutationObserver records. Flow observers/listeners are now installed only while the widget is enabled and are released when disabled; the standalone fake element gained the minimal CSSStyleDeclaration methods needed by the real Widgets bundle.
+
+Focused validation: coexistence 12/12; W5 migration 4/4; shared Boost widget 15/15. Final build, catalog, layout, source-integrity and complete-suite results are in the W7 validation block below.
+
+## Boost-widget follow-up W7 — docs, install notes and live owner handoff (2026-11-21)
+
+Updated `additional/boost/README.md` to describe the single Boost-owned card source, normal in-flow placement and tray-relative order, shared safe mount helper, no-target hover fallback, `widget_enabled`, the legacy-pref migration and independent install behavior. Updated `additional/widgets/README.md` to describe generic free-area accounting without naming or owning another module. Added Boost and Widgets to the standalone install table in `additional/README.md`, and documented standalone URLs, independence and precedence in `INSTALL.md`.
+
+### Final validation (2026-11-21)
+
+- `node tests/run-all.cjs`: **312/312 test files passed, 0 failed** (334.3 s combined runtime). The suite emits its existing failure-injection diagnostics on stderr; the command exits 0 and reports no TODO failures.
+- Focused tests: W5 migration 4/4; W6 coexistence 12/12; shared Boost widget 15/15; G9 docs 6/6; standalone lifecycle 98; source integrity 3/3; settings catalog coverage 5/5.
+- Rebuilt all standalone packages at the existing target version with `node tools/build-standalone.cjs --keep-version`; rebuilt generated preferences and the z-height map. `node tools/build-standalone.cjs --check`, `node tools/check-settings-consistency.cjs`, `node tools/organize-layout-order.cjs --check` and `node tools/sync-version.cjs --check` pass; all versions remain 3.4.1. Syntax checks and `git diff --cached --check` pass.
+- The first post-doc full-suite run found one stale G9 README assertion for the removed Widgets hand-off. Updated that documentation assertion to the new independent-owner contract; the complete rerun passed.
+- No live Zen/Sine visual or performance result is claimed. All five owner gates below remain OPEN pending owner screenshots.
+
+### Five live Zen/Sine owner gates — ALL OPEN
+
+No live Zen/Sine screenshots have been supplied. Automated fake-DOM/generated-package results do not complete these gates. Do not mark them complete until the owner performs the checks and attaches screenshots:
+
+1. **Full pack and space:** show Boost directly below the Widgets tray and above media/bottom buttons with no overlap; narrow the sidebar/open many tabs and show the tray shrinks first while Boost stays visible.
+2. **Video player:** with the sidebar video player visible, show no overlap and unchanged player behavior.
+3. **Settings and migration:** show the widget toggle under Memory, OFF hiding the tile, no toggle in Widgets settings, and a previously saved OFF choice surviving update.
+4. **Actions and feedback:** demonstrate Light, Deep, Game Mode and Restore from the tile, with toasts beside it.
+5. **Independent installs:** show Boost-only has its tile and Widgets-only has no Boost element.
+
+The old Widgets preference remains in the profile after migration; this code deliberately does not delete user data. No live memory/performance result is claimed. The source also remains staged/uncommitted in this checkout: the visible branch HEAD is the grafted base `314154728ee6c297ccc57e02915d5950d49f41da`, so earlier W1–W4 commit hashes recorded in historical handoff text are not visible commits in this checkout.

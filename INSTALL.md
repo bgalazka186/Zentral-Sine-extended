@@ -14,3 +14,19 @@ Double-click the video image to enlarge it. Drag anywhere on the video to move i
 With partial overflow enabled, panels snap near the normal safe edge; move farther past that zone to leave them partly outside. With overflow disabled, docking requires the configured push distance, 15 px by default.
 
 The Mobile UA pill shortcut is intentionally excluded. Use the existing RMB action. See `docs/REQUEST-AUDIT.md` for the request inventory, remaining architectural work and live-testing limits. Internal tests, logs and changelogs are excluded from this package.
+
+## Optional standalone Sine installs
+
+The complete package already includes both the Boost feature and the generic Sidebar Widgets tray. If you want only
+one of them instead, add its folder URL as a separate mod in Sine:
+
+- **Zentral Memory Boost:** `https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/boost`
+- **Zentral Sidebar Widgets:** `https://github.com/bgalazka186/Zentral-Sine-extended/tree/main/additional/widgets`
+
+Enable `sine.allow-unsafe-js` and restart Zen after the first standalone install. Boost-only gives the Boost-owned
+tile; Widgets-only gives the generic tray without a Boost tile. Both standalone packages can coexist in either load
+order. Their settings and UI ownership stay separate; the Widgets tray does not register or take over the Boost card.
+When the complete package and a standalone copy of the same feature are both installed, the full pack takes precedence.
+The Boost visibility setting is `zen.workspace.zentral.boost.widget_enabled` in Memory settings. If the older
+`zen.workspace.zentral.widgets.boost.enabled` has a saved value, Boost migrates it once only when the new setting has
+no saved value; the old preference is left untouched.

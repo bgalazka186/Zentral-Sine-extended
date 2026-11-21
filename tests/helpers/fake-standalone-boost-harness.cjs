@@ -23,13 +23,28 @@ class FakeElement {
     this.parentNode = null;
     this.children = [];
     this.attrs = new Map();
-    this.style = {};
+    this.style = {
+      _props: new Map(),
+      setProperty(name, value) { this._props.set(String(name), String(value)); },
+      removeProperty(name) { this._props.delete(String(name)); },
+      getPropertyValue(name) { return this._props.get(String(name)) || ""; },
+    };
     this._listeners = [];
     this._rect = { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 };
     this.offsetWidth = 0;
     this.offsetHeight = 0;
   }
   get parentElement() { return this.parentNode; }
+  get nextSibling() {
+    if (!this.parentNode) return null;
+    const index = this.parentNode.children.indexOf(this);
+    return index >= 0 ? this.parentNode.children[index + 1] || null : null;
+  }
+  get previousSibling() {
+    if (!this.parentNode) return null;
+    const index = this.parentNode.children.indexOf(this);
+    return index > 0 ? this.parentNode.children[index - 1] || null : null;
+  }
   get isConnected() {
     let cur = this;
     while (cur) {
@@ -65,6 +80,17 @@ class FakeElement {
     child.parentNode = this;
     child._doc = this._doc;
     this.children.push(child);
+    return child;
+  }
+  insertBefore(child, before) {
+    if (!child) return child;
+    if (before === child) return child;
+    if (child.parentNode) child.remove();
+    const index = before == null ? this.children.length : this.children.indexOf(before);
+    if (index < 0) throw new Error("insertBefore reference is not a child");
+    child.parentNode = this;
+    child._doc = this._doc;
+    this.children.splice(index, 0, child);
     return child;
   }
   append(...children) { for (const child of children) this.appendChild(child); }
@@ -159,6 +185,19 @@ function instrumentStandaloneBoostApi(api, calls, options = {}) {
     const off = originalOnChange.apply(api, args);
     return () => { calls.unsubscribe = (calls.unsubscribe || 0) + 1; return off(); };
   };
+  const originalOnLimiterEvent = api.onLimiterEvent;
+  api.onLimiterEvent = (fn) => {
+    calls.limiterSubscribe = (calls.limiterSubscribe || 0) + 1;
+    const off = typeof originalOnLimiterEvent === "function"
+      ? originalOnLimiterEvent.call(api, fn)
+      : () => calls.limiterListeners.delete(fn);
+    calls.limiterListeners.add(fn);
+    return () => {
+      calls.limiterUnsubscribe = (calls.limiterUnsubscribe || 0) + 1;
+      calls.limiterListeners.delete(fn);
+      return off();
+    };
+  };
   const originalOnGameModeEvent = api.onGameModeEvent;
   api.onGameModeEvent = (fn) => {
     calls.gameModeSubscribe = (calls.gameModeSubscribe || 0) + 1;
@@ -212,12 +251,14 @@ function createFakeStandaloneBoostHarness(options = {}) {
     "zen.workspace.zentral.boost.shortcut": "",
     ...(options.prefs || {}),
   }));
+  for (const key of options.unsetPrefs || []) prefs.delete(String(key));
   const prefObservers = [];
   const timers = new Map();
   let timerId = 0;
   const listeners = { win: new Map(), doc: new Map() };
   const calls = {
     startSampling: 0, stopSampling: 0, subscribe: 0, unsubscribe: 0,
+    limiterSubscribe: 0, limiterUnsubscribe: 0, limiterListeners: new Set(),
     gameModeSubscribe: 0, gameModeUnsubscribe: 0, gameModeListeners: new Set(),
     runLevel1: 0, runLevel2: 0, setGameMode: 0, restoreSession: 0,
     previewGameMode: 0, gameModeEvents: 0,
@@ -229,7 +270,45 @@ function createFakeStandaloneBoostHarness(options = {}) {
     }
   };
   calls.emitGameModeEvent = emitGameModeEvent;
+  const emitLimiterEvent = (event) => {
+    for (const fn of [...calls.limiterListeners]) {
+      try { fn({ kind: "limiter", ...event }); } catch (error) { console.error("fake limiter event failed", error); throw error; }
+    }
+  };
+  calls.emitLimiterEvent = emitLimiterEvent;
   const doc = createFakeDocument();
+  const mutationObservers = new Set();
+  class FakeMutationObserver {
+    constructor(callback) {
+      this.callback = callback;
+      this.targets = new Map();
+    }
+    observe(target, options = {}) {
+      this.targets.set(target, { ...options });
+      mutationObservers.add(this);
+    }
+    disconnect() {
+      this.targets.clear();
+      mutationObservers.delete(this);
+    }
+    deliver(records) {
+      const matches = records.filter((record) => {
+        for (const [target, options] of this.targets) {
+          let current = record.target;
+          while (current && current !== target && options.subtree) current = current.parentNode;
+          if (current !== target) continue;
+          if (record.type === "attributes") {
+            if (!options.attributes) continue;
+            if (options.attributeFilter && !options.attributeFilter.includes(record.attributeName)) continue;
+            return true;
+          }
+          if (record.type === "childList" && options.childList) return true;
+        }
+        return false;
+      });
+      if (matches.length) this.callback(matches, this);
+    }
+  }
   const win = {
     innerWidth: 1200,
     innerHeight: 800,
@@ -257,6 +336,7 @@ function createFakeStandaloneBoostHarness(options = {}) {
     },
     addUnloadListener(fn) { this.addEventListener("unload", fn); },
     getComputedStyle() { return { display: "block", visibility: "visible", opacity: "1" }; },
+    MutationObserver: FakeMutationObserver,
     gBrowserInit: { delayedStartupFinished: true },
   };
   win.window = win;
@@ -306,7 +386,9 @@ function createFakeStandaloneBoostHarness(options = {}) {
     io: { newURI: (spec) => ({ spec }) },
   };
   const ChromeUtils = {
-    requestProcInfo: () => ({ memory: 512_000_000, children: [] }),
+    requestProcInfo: typeof options.requestProcInfo === "function"
+      ? () => options.requestProcInfo()
+      : () => options.procInfo ?? ({ memory: 512_000_000, children: [] }),
     forceGC() {}, forceCC() {},
     importESModule: () => ({ Services }),
   };
@@ -328,7 +410,7 @@ function createFakeStandaloneBoostHarness(options = {}) {
     Symbol, Error, TypeError, Date, JSON, RegExp, globalThis: win,
   });
   // Bridge properties assigned later by the bundle back to the same object the caller sees.
-  for (const key of ["ZentralBoost", "__zentralStandalone", "__zentralStandaloneRuntime", "__zentralBoostLoader", "__zentralBoostStandaloneWidget"]) {
+  for (const key of ["ZentralBoost", "__zentralStandalone", "__zentralStandaloneRuntime", "__zentralBoostLoader", "__zentralBoostWidgetModule", "__zentralBoostWidget"]) {
     Object.defineProperty(win, key, {
       configurable: true, enumerable: true,
       get() { return context[key]; },
@@ -356,12 +438,15 @@ function createFakeStandaloneBoostHarness(options = {}) {
   }
 
   const harness = {
-    win, doc, context, timers, calls, prefs, prefObservers, listeners, emitGameModeEvent,
+    win, doc, context, timers, calls, prefs, prefObservers, listeners, mutationObservers, emitGameModeEvent, emitLimiterEvent,
+    emitMutations(records) {
+      for (const observer of [...mutationObservers]) observer.deliver(records);
+    },
     api: () => win.ZentralBoost || null,
-    card: () => doc.getElementById("zentral-boost-standalone-card"),
-    anchor: () => doc.getElementById("zentral-boost-standalone-anchor"),
-    actions: () => harness.card()?.querySelectorAll("[data-zw-boost-action]") || [],
-    action(id) { return harness.actions().find((el) => el.getAttribute("data-zw-boost-action") === id) || null; },
+    card: () => doc.getElementById("zentral-boost-widget"),
+    anchor: () => doc.getElementById("zentral-boost-widget-anchor"),
+    actions: () => harness.card()?.querySelectorAll("[data-zbw-action]") || [],
+    action(id) { return harness.actions().find((el) => el.getAttribute("data-zbw-action") === id) || null; },
     fire(el, type, extra = {}) { return el?.dispatch?.(type, extra); },
     listenerCount(target = "doc") {
       const map = listeners[target];

@@ -25,9 +25,21 @@
     ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs")
       .Services;
   const ZentralRuntime = window.ZentralRuntime || window.__zentralStandaloneRuntime;
+  const boostModuleLoader = window.ZentralModuleLoader || window.__zentralBoostLoader;
+  // The same source is embedded by the standalone manifest and preloaded by the full-pack catalog.
+  // Calling load here is idempotent in both loaders and keeps the public Boost API independent of Widgets.
+  try {
+    if (!window.__zentralBoostWidgetModule)
+      boostModuleLoader?.load?.("additional/boost/ZentralBoostWidget.js", { owner: "boost" });
+  } catch (error) {
+    console.warn("[Zentral Boost] widget source unavailable", error);
+  }
 
   const PREF = Object.freeze({
     ENABLED: "zen.workspace.zentral.boost.enabled",
+    WIDGET_ENABLED: "zen.workspace.zentral.boost.widget_enabled",
+    // W5: import a saved Widgets-owned toggle once; the old preference is read-only and is never cleared.
+    LEGACY_WIDGET_ENABLED: "zen.workspace.zentral.widgets.boost.enabled",
     STARTUP_TRIM: "zen.workspace.zentral.boost.startup_trim",
     // OW-112: the old `keep_pinned` name said the opposite of what it did — `true` meant a deep pass MAY UNLOAD
     // pinned/Essential tabs. The checkbox label always said so; now the pref does too. Off by default, unchanged.
@@ -205,9 +217,9 @@
   // B4.3: what a panel record may do in the background. `live` is the default for every existing record.
   const BACKGROUND_MODES = Object.freeze(["live", "throttled", "asleep-allowed"]);
 
-  /* G10: strings and pure card data shared by the full-pack tray and the standalone Boost card. The standalone
-   * package has no Widgets source, so Boost owns its own words here; nothing in this block reads a pref, touches
-   * the DOM, starts a timer or samples RAM. Language comes from the caller (browser locale or Widgets language). */
+  /* G10: strings and pure card data for Boost's shared in-flow tile and its no-target fallback. The standalone
+   * package has no Widgets source, so Boost owns its words here; this block reads no prefs, touches no DOM, starts
+   * no timer and samples no RAM. Language comes from the browser locale supplied by the card adapter. */
   const BOOST_WIDGET_STRINGS = Object.freeze({
     en: Object.freeze({
       "card.title": "Memory Boost",
@@ -218,18 +230,27 @@
       "card.game": "Game",
       "card.restore": "Restore",
       "card.lightHint": "Light: GC/CC + memory minimize. No tabs touched.",
-      "card.deepHint": "Deep: Light clean first, then eligible tabs sleep.",
-      "card.gameHint": "Game Mode: one plan-driven cleanup pass.",
-      "card.gameHintOn": "Game Mode is on. Switch it off to Restore.",
+      "card.deepHint": "Deep: Light clean first, then eligible tabs sleep. Restore available.",
+      "card.gameHint": "Game Mode: pauses repeating features and idles non-essential browsers.",
+      "card.gameHintOn": "Game Mode on — timers paused, background tabs idle",
       "card.deepSoon": "Needs the shared tab policy",
-      "card.restoreHint": "Restore: wake the saved Game Mode snapshot.",
+      "card.restoreHint": "Restore: reloads what was unloaded — panels as panels, tabs as tabs.",
       "card.nothingRestore": "Nothing to restore yet",
       "card.busy": "Working\u2026",
       "card.result": "Freed {mb} MB",
-      "card.deepResult": "Put {tabs} tab(s) and {panels} app(s) to sleep \u00b7 freed {mb} MB",
-      "card.gameOn": "Game Mode on",
-      "card.gameOff": "Game Mode off",
+      "card.nothingFreed": "Memory was already tidy",
+      "card.resultSkipped": " · skipped {count} protected tab(s)",
+      "card.skipped": "Last deep pass kept: {reasons}",
+      "card.loaded": "Loaded tabs: {pinned} pinned, {unpinned} unpinned",
+      "card.deepResult": "Put {tabs} tab(s) and {panels} panel(s) to sleep, freed {mb} MB",
+      "card.gameOn": "Game Mode on — timers paused, background tabs idle",
+      "card.gameOff": "Game Mode off — everything back to normal",
       "card.restoreDone": "Restoring {panels} apps and {tabs} tabs",
+      "card.restored": "Woke {count} panel(s)",
+      "card.restoredTabs": "{count} sleeping tab(s) ready to reload on click",
+      "card.limitHit": "{mb} MB in use, above your {limit} MB limit. Open Boost to free memory.",
+      "card.limitDone": "Freed memory down to {mb} MB",
+      "card.limitNothing": "Memory is high, but nothing else may be unloaded",
       "card.preview": "Will free about {tabs} tabs and {panels} apps before Game Mode starts",
       "card.restoreLabel": "Restore ({panels} apps, {tabs} tabs)",
       "feedback.gameOn": "Game Mode: freed {mb} MB · {tabs} tabs, {panels} apps unloaded · kept: {kept}",
@@ -248,18 +269,27 @@
       "card.game": "Gra",
       "card.restore": "Przywr\u00f3\u0107",
       "card.lightHint": "Lekko: GC/CC i minimalizacja pami\u0119ci. Karty nie s\u0105 ruszane.",
-      "card.deepHint": "G\u0142\u0119boko: najpierw lekkie czyszczenie, potem usypianie kart.",
-      "card.gameHint": "Tryb gry: jeden planowy przebieg czyszczenia.",
-      "card.gameHintOn": "Tryb gry jest w\u0142\u0105czony. Wy\u0142\u0105cz go, aby przywr\u00f3ci\u0107.",
+      "card.deepHint": "Głęboko: najpierw lekkie czyszczenie, potem usypianie kart. Dostępne Przywróć.",
+      "card.gameHint": "Tryb gry: wstrzymuje cykliczne funkcje i wygasza niepotrzebne karty.",
+      "card.gameHintOn": "Tryb gry włączony — liczniki wstrzymane, karty w tle bezczynne",
       "card.deepSoon": "Wymaga wsp\u00f3lnej polityki kart",
-      "card.restoreHint": "Przywr\u00f3\u0107: obud\u017a zapisany stan Trybu gry.",
+      "card.restoreHint": "Przywróć: wczytuje to, co zostało uśpione — panele jako panele, karty jako karty.",
       "card.nothingRestore": "Nie ma jeszcze czego przywraca\u0107",
       "card.busy": "Pracuj\u0119\u2026",
       "card.result": "Zwolniono {mb} MB",
-      "card.deepResult": "U\u015bpiono {tabs} kart i {panels} aplikacji \u00b7 zwolniono {mb} MB",
-      "card.gameOn": "Tryb gry w\u0142\u0105czony",
-      "card.gameOff": "Tryb gry wy\u0142\u0105czony",
+      "card.nothingFreed": "Pamięć była już uporządkowana",
+      "card.resultSkipped": " · pominięto {count} chronionych kart",
+      "card.skipped": "Ostatnie głębokie czyszczenie zostawiło: {reasons}",
+      "card.loaded": "Wczytane karty: {pinned} przypiętych, {unpinned} nieprzypiętych",
+      "card.deepResult": "Uśpiono {tabs} kart i {panels} paneli, zwolniono {mb} MB",
+      "card.gameOn": "Tryb gry włączony — liczniki wstrzymane, karty w tle bezczynne",
+      "card.gameOff": "Tryb gry wyłączony — wszystko wraca do normy",
       "card.restoreDone": "Przywracanie {panels} aplikacji i {tabs} kart",
+      "card.restored": "Obudzono {count} paneli",
+      "card.restoredTabs": "{count} uśpionych kart wczyta się po kliknięciu",
+      "card.limitHit": "W użyciu {mb} MB, powyżej limitu {limit} MB. Otwórz Boost, aby zwolnić pamięć.",
+      "card.limitDone": "Zwolniono pamięć do {mb} MB",
+      "card.limitNothing": "Pamięć jest wysoka, ale nie ma już czego zwalniać",
       "card.preview": "U\u015bpi oko\u0142o {tabs} kart i {panels} aplikacji przed w\u0142\u0105czeniem Trybu gry",
       "card.restoreLabel": "Przywr\u00f3\u0107 ({panels} aplikacji, {tabs} kart)",
       "feedback.gameOn": "Tryb gry: zwolniono {mb} MB \u00b7 {tabs} kart, {panels} aplikacji u\u015bpionych \u00b7 zachowano: {kept}",
@@ -287,6 +317,23 @@
     const n = Number(value);
     return Number.isFinite(n) && n >= 0 ? Math.round(n) : fallback;
   }
+  function boostWidgetSkippedLine(reasons) {
+    if (!reasons || typeof reasons !== "object") return "";
+    return Object.entries(reasons)
+      .map(([reason, count]) => [String(reason), Number(count) || 0])
+      .filter(([, count]) => Number.isFinite(count) && count > 0)
+      .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+      .map(([reason, count]) => reason + ": " + count)
+      .join(" · ");
+  }
+  function boostWidgetSkippedCount(result) {
+    const counts = result && typeof result === "object" ? result.skippedCounts : null;
+    if (!counts || typeof counts !== "object") return 0;
+    return Object.values(counts).reduce((sum, value) => {
+      const count = Number(value);
+      return Number.isFinite(count) && count > 0 ? sum + Math.floor(count) : sum;
+    }, 0);
+  }
   function boostWidgetMenuItems(options = {}) {
     const language = boostWidgetLanguage(options.language);
     const t = (key, params) => boostWidgetText(language, key, params);
@@ -299,7 +346,9 @@
     const gameHint = !gameOn && options.previewHint
       ? String(options.previewHint)
       : t(gameOn ? "card.gameHintOn" : "card.gameHint");
-    return [
+    const skippedLine = boostWidgetSkippedLine(options.skipped);
+    const loadedTabs = options.loadedTabs && typeof options.loadedTabs === "object" ? options.loadedTabs : {};
+    const items = [
       {
         id: "free-light", level: "light", shortLabel: t("card.light"), label: t("card.light"),
         description: t("card.lightHint"), hint: t("card.lightHint"), available: !running,
@@ -322,6 +371,18 @@
         available: options.canRestore !== false && !running && restorable > 0,
       },
     ];
+    if (skippedLine) {
+      items.push({
+        id: "deep-skipped",
+        label: t("card.skipped", { reasons: skippedLine }),
+        available: false,
+        hint: t("card.loaded", {
+          pinned: boostWidgetNumber(loadedTabs.pinned, 0),
+          unpinned: boostWidgetNumber(loadedTabs.unpinned, 0),
+        }),
+      });
+    }
+    return items;
   }
   function boostWidgetPreviewText(preview, language) {
     const counts = preview && typeof preview === "object" ? (preview.counts || preview) : {};
@@ -362,14 +423,26 @@
       (restore && restore !== nothing ? " \u00b7 " + restore : "");
   }
   function boostWidgetResultText(result, language) {
-    const r = result && typeof result === "object" ? result : {};
-    if (r.unloaded && (r.unloaded.tabs || r.unloaded.panels)) {
-      return boostWidgetText(language, "card.deepResult", {
-        tabs: boostWidgetNumber(r.unloaded.tabs, 0), panels: boostWidgetNumber(r.unloaded.panels, 0),
-        mb: boostWidgetNumber(r.freedMB, 0),
-      });
+    const withSkipped = (line) => {
+      const count = boostWidgetSkippedCount(result);
+      return count ? line + boostWidgetText(language, "card.resultSkipped", { count }) : line;
+    };
+    if (!result || typeof result !== "object")
+      return withSkipped(boostWidgetText(language, "card.unknown"));
+    if (result.by === "level2" && result.unloaded) {
+      const tabs = boostWidgetNumber(result.unloaded.tabs, 0);
+      const panels = boostWidgetNumber(result.unloaded.panels, 0);
+      if (tabs || panels)
+        return withSkipped(boostWidgetText(language, "card.deepResult", {
+          tabs, panels, mb: boostWidgetNumber(result.freedMB, 0),
+        }));
     }
-    return boostWidgetText(language, "card.result", { mb: boostWidgetNumber(r.freedMB, 0) });
+    const freed = Number(result.freedMB);
+    if (result.freedMB == null || !Number.isFinite(freed))
+      return withSkipped(boostWidgetText(language, "card.unknown"));
+    if (freed <= 0)
+      return withSkipped(boostWidgetText(language, "card.nothingFreed"));
+    return withSkipped(boostWidgetText(language, "card.result", { mb: Math.round(freed) }));
   }
   // B5/OW-92: the limiter's own numbers. Two cadences, both one-shot chains: a slow idle check and a faster one while
   // above 70 % of the limit. Nothing here is an interval.
@@ -420,7 +493,7 @@
   }
 
   (function () {
-    function start() {
+    function start({ lifecycle, runtime: hostRuntime } = {}) {
       if (window.ZentralBoost) return window.ZentralBoost.destroy;
 
       /* ---------------- preferences (read live, never cached at startup) ---------------- */
@@ -458,6 +531,19 @@
           return false;
         }
       };
+      // W5: migrate the retired Widgets toggle without deleting it. A user value on the new Boost-owned pref always
+      // wins (including explicit false); otherwise a saved legacy boolean is copied once into the new pref.
+      const migrateWidgetEnabled = () => {
+        try {
+          if (prefHasUserValue(PREF.WIDGET_ENABLED)) return;
+          if (!prefHasUserValue(PREF.LEGACY_WIDGET_ENABLED)) return;
+          Services.prefs.setBoolPref(
+            PREF.WIDGET_ENABLED,
+            prefBool(PREF.LEGACY_WIDGET_ENABLED, true),
+          );
+        } catch (_) {}
+      };
+      migrateWidgetEnabled();
       const mayUnloadPinned = () => {
         if (prefHasUserValue(PREF.UNLOAD_PINNED)) return prefBool(PREF.UNLOAD_PINNED, false);
         return prefBool(PREF.LEGACY_KEEP_PINNED, false) || prefBool(PREF.UNLOAD_PINNED, false);
@@ -3165,6 +3251,78 @@
       }
 
       window.ZentralBoost = api;
+      // W3 shares one mount adapter in standalone and the full pack; both use a
+      // safe in-flow anchor first and retain the hover-card fallback if none exists.
+      const widgetRuntime = hostRuntime || ZentralRuntime || window.__zentralStandaloneRuntime;
+      if (typeof window.__zentralBoostWidgetModule?.mount === "function" &&
+          prefBool(PREF.ENABLED, true)) {
+        const widgetAdapter = {
+          window,
+          document: window.document,
+          chooseBottomMount: window.__zentralSidebarMount?.chooseBottomMount,
+          getSidebarRect: () => widgetRuntime?.nativeSidebarRect?.() || null,
+          createSidebarHoverCard: (options) => widgetRuntime?.createSidebarHoverCard?.(options),
+          registerHostUnload: (callback) => widgetRuntime?.registerHostUnload?.(callback),
+          observeEnabledChange: (callback) => {
+            const releases = [];
+            for (const pref of [PREF.ENABLED, PREF.WIDGET_ENABLED]) {
+              if (typeof lifecycle?.preference === "function") {
+                const release = lifecycle.preference(pref, callback);
+                if (typeof release === "function") releases.push(release);
+                continue;
+              }
+              const observer = {
+                observe(_subject, _topic, data) {
+                  if (!data || data === pref) callback();
+                },
+              };
+              try {
+                Services.prefs.addObserver(pref, observer);
+                releases.push(() => Services.prefs.removeObserver(pref, observer));
+              } catch (_) {}
+            }
+            let active = true;
+            return () => {
+              if (!active) return;
+              active = false;
+              for (const release of releases.splice(0).reverse()) {
+                try { release(); } catch (_) {}
+              }
+            };
+          },
+          setTimeout: (callback, delay) => lifecycle?.setTimeout
+            ? lifecycle.setTimeout(callback, delay)
+            : setTimer(callback, delay),
+          clearTimeout: (id) => lifecycle?.clearTimeout
+            ? lifecycle.clearTimeout(id)
+            : clearTimer(id),
+          own: (dispose) => {
+            if (typeof lifecycle?.own === "function") return lifecycle.own(dispose);
+            let active = true;
+            onCleanup(() => { if (active) { active = false; dispose(); } });
+            return () => { if (active) { active = false; dispose(); } };
+          },
+          listen: (target, type, callback, options) => {
+            if (typeof lifecycle?.listen === "function") return lifecycle.listen(target, type, callback, options);
+            target.addEventListener(type, callback, options);
+            return () => target.removeEventListener(type, callback, options);
+          },
+        };
+        try {
+          const stopWidget = window.__zentralBoostWidgetModule.mount({
+            window,
+            document: window.document,
+            runtime: widgetRuntime,
+            lifecycle,
+            adapter: widgetAdapter,
+            api,
+            isEnabled: () => prefBool(PREF.ENABLED, true) && prefBool(PREF.WIDGET_ENABLED, true),
+          });
+          if (typeof stopWidget === "function") onCleanup(stopWidget);
+        } catch (error) {
+          warn("Boost widget failed to initialize: " + String(error));
+        }
+      }
       const onWindowUnload = () => api.destroy();
       window.addEventListener("unload", onWindowUnload, { once: true });
       onCleanup(() => {

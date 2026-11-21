@@ -114,26 +114,8 @@ test("the widgets read the language when they draw, not when they start", () => 
     assert.ok(!new RegExp('(setBtn|clockNoteBtn|clockNoteChip)\\.textContent = "' + literal + '"').test(SRC), literal + " is not a literal any more");
     assert.ok(SRC.includes('tw("' + key + '")'), literal + " goes through tw() with " + key);
   }
-  for (const key of ["clock.title", "date.title", "weather.title", "boost.title", "tray.label"]) {
+  for (const key of ["clock.title", "date.title", "weather.title", "tray.label"]) {
     assert.ok(SRC.includes('tw("' + key + '")'), "the card title and the tray label use " + key);
-  }
-});
-
-test("the Boost card's own words are translated through its options, so the pure part stays pure", () => {
-  // OW-90: the Status card is gone; its words went with it and Boost's arrive in both languages.
-  const pl = { language: "pl" };
-  const items = c.boostMenuItems({ running: false, ...pl });
-  assert.equal(items.find((i) => i.id === "free-light").label, c.WIDGET_STRINGS.pl["boost.free"], "the light pass is Polish");
-  assert.equal(items.find((i) => i.id === "free-deep").label, c.WIDGET_STRINGS.pl["boost.deep"], "and so is the deep entry");
-  assert.equal(c.boostResultText({ freedMB: 120 }, pl), c.WIDGET_STRINGS.pl["boost.freed"].replace("{mb}", "120"),
-    "the toast line is built from the translated template");
-  // English is unchanged for a caller that says nothing (every test written before this one).
-  assert.equal(c.boostResultText({ freedMB: 120 }), "Freed 120 MB");
-  // Every key either language needs exists in both, or a missing translation is visible as a dotted key.
-  for (const key of Object.keys(c.WIDGET_STRINGS.en)) {
-    assert.ok(key in c.WIDGET_STRINGS.pl, key + " is translated");
-    assert.ok(!/^boost\./.test(key) || c.WIDGET_STRINGS.pl[key] !== c.WIDGET_STRINGS.en[key] || key === "boost.title",
-      key + " really is a translation");
   }
 });
 

@@ -247,8 +247,9 @@
         id: "boost",
         name: "Memory Boost",
         file: "additional/boost/ZentralBoost.uc.js",
+        extraSources: ["loader/ZentralSidebarMount.js", "additional/boost/ZentralBoostWidget.js"],
         description:
-          "Standalone. Reads browser RAM on demand and frees memory without closing anything; its own preferences.",
+          "Standalone. Reads browser RAM on demand, owns its in-flow sidebar widget and frees memory without closing anything.",
       },
       {
         id: "panels",
@@ -277,6 +278,7 @@
         id: "widgets",
         name: "Sidebar widgets",
         file: "additional/widgets/ZentralWidgets.uc.js",
+        extraSources: ["loader/ZentralSidebarMount.js"],
         description:
           "Opt-in sidebar widget tray with automatic free-area sizing, video-player avoidance, pause-when-hidden, and cached values.",
       },
@@ -424,6 +426,11 @@
         id: "RssDisplay",
         file: "additional/rss/ZentralRssDisplay.css",
         owners: ["rss"],
+      },
+      {
+        id: "BoostWidget",
+        file: "additional/boost/ZentralBoostWidget.css",
+        owners: ["boost"],
       },
       {
         id: "Widgets",
