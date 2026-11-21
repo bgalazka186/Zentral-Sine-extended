@@ -513,6 +513,36 @@ test("9. Video player and anchor stay adjacent; Boost seats after the pair", asy
   }
 });
 
+test("9b. A tray directly before the tabs-host video stays adjacent while Boost seats after the player", async () => {
+  const { h, sidebar } = standaloneFixture({
+    [WIDGETS_ENABLED]: true,
+    [WIDGETS_DISABLED_IDS]: "clock,date,weather",
+  });
+  try {
+    await h.boot();
+    await loadStandaloneWidgets(h);
+    const tray = h.doc.getElementById("zentral-sidebar-widgets");
+    assert.ok(tray, "the generic Widgets tray mounted");
+
+    // Model the narrow mount-host arrangement: the tray directly precedes the video player,
+    // both in the tabs host's sidebar column. Re-seating Boost must preserve this pair.
+    sidebar.toolbox.insertBefore(tray, sidebar.video);
+    assert.ok(sidebar.tabs.parentNode === sidebar.video.parentNode, "the video is in the tabs host column");
+    assert.equal(tray.nextSibling?.id, sidebar.video.id, "the tray/player adjacency is the precondition");
+    h.emitMutations([{ type: "childList", target: sidebar.toolbox, addedNodes: [tray], removedNodes: [] }]);
+    await h.flush(0, 100);
+
+    const card = h.card();
+    assert.ok(card, "Boost's tile remains mounted");
+    assert.equal(tray.nextSibling?.id, sidebar.video.id, "re-seating must preserve the tray/player adjacency");
+    assert.notEqual(sidebar.video.previousSibling?.id, card.id, "the tile must not become the video's previous sibling");
+    assert.equal(card.previousSibling?.id, sidebar.video.id, "Boost stays immediately after the video player");
+  } finally {
+    disposeStandaloneWidgets(h);
+    h.destroy();
+  }
+});
+
 test("10. Reloading Boost twice keeps one tile; destroy removes tile, observer, and timers", async () => {
   const { h } = standaloneFixture();
   try {

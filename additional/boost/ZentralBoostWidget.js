@@ -729,6 +729,19 @@ function safeFlowMountTarget() {
       anchorId: String(target.anchorId || "sidebar") + ":after-tray",
     };
   }
+
+  // The tray adjustment can put the video player back in `before` (tray -> video).
+  // Re-apply the adjacency guard so the tile stays after the player, never between them.
+  if (target.before?.id === VIDEO_PLAYER_ID) {
+    const previous = target.before.previousSibling;
+    if (SEAT_ANCHOR_IDS.includes(previous?.id) || previous === tray) {
+      target = {
+        ...target,
+        before: target.before.nextSibling || null,
+        anchorId: VIDEO_PLAYER_ID + ":after",
+      };
+    }
+  }
   return target;
 }
 

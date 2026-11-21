@@ -1475,3 +1475,7 @@ The old Widgets preference remains in the profile after migration; this code del
 ## Boost-widget follow-up 5 — C1 version bump (3.4.2, 2026-11-21)
 
 The W1–W7 validation above remains a historical record of version 3.4.1. C1 raises `theme.json`, `UPSTREAM.json`, the loader and settings badge, every standalone module, generated standalone bundle/lock and current version-citing guides to **3.4.2** with `node tools/sync-version.cjs --set 3.4.2` and the required full build chain. The Notes next-session handoff now records the current version and says not to bump again without owner authorization. Sine can now detect this release as newer than 3.4.1.
+
+## Boost-widget follow-up 5 — C2 video adjacency (2026-11-21)
+
+`safeFlowMountTarget()` now re-checks the player boundary after the tray-relative adjustment. If `before` is the video preview and its previous sibling is a seat anchor or the tray, Boost seats after the video instead. New coexistence case 9b was run against the pre-fix code and failed because Boost became `video.previousSibling`; after the guard and standalone rebuild, the coexistence suite passes 13/13. The regression is fake-DOM/generated-bundle evidence only; real Zen visual gates remain open.
