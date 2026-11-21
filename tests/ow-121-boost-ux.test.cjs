@@ -1,9 +1,8 @@
 "use strict";
 /* OW-121 — Boost UX: responsive narrow-sidebar readability follow-up.
  *
- * Historical OW-121 kept the compact row; the visual follow-up replaces that constraint with readable 2×2 actions.
- * Static checks are screenshot-free and a fake sidebar / fake Gecko drives the Boost-owned source. Live appearance
- * remains an OWNER GATE.
+ * The 170 px target uses one compact row of four actions; only very narrow cards use 2×2. Static checks are
+ * screenshot-free and a fake sidebar / fake Gecko drives the Boost-owned source. Live appearance remains an OWNER GATE.
  */
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -15,6 +14,7 @@ const read = (rel) => fs.readFileSync(path.join(REPO, rel), "utf8");
 const CURRENT_VERSION = JSON.parse(read("theme.json")).version;
 const BOOST_WIDGET_SRC = read("additional/boost/ZentralBoostWidget.js");
 const BOOST_WIDGET_CSS = read("additional/boost/ZentralBoostWidget.css");
+const WIDGETS_CSS = read("additional/widgets/ZentralWidgets.css");
 const BOOST_SRC = read("additional/boost/ZentralBoost.uc.js");
 const POLICY_SRC = read("loader/ZentralTabPolicy.js");
 const DOCS = [
@@ -123,16 +123,17 @@ test("the Boost-owned card uses the readable grid, short actions, toast block an
     BOOST_WIDGET_CSS.indexOf(".zbw-row {"), BOOST_WIDGET_CSS.indexOf(".zbw-header {"));
   assert.match(rowBlock, /display:\s*grid/);
   assert.match(BOOST_WIDGET_CSS, /grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+  assert.match(BOOST_WIDGET_CSS, /@container\s+zbw\s*\(min-width:\s*150px\)/);
   assert.match(BOOST_WIDGET_CSS, /@container\s+zbw\s*\(min-width:\s*280px\)/);
   assert.match(BOOST_WIDGET_CSS, /grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)/);
   assert.doesNotMatch(BOOST_WIDGET_CSS, /max-height:\s*26px|overflow:\s*hidden\s*!important/);
   const actionBlock = BOOST_WIDGET_CSS.slice(
     BOOST_WIDGET_CSS.indexOf(".zbw-action,"), BOOST_WIDGET_CSS.indexOf(".zbw-action:hover"));
   assert.match(actionBlock, /appearance:\s*none/);
-  assert.match(actionBlock, /height:\s*26px !important/);
+  assert.match(actionBlock, /height:\s*24px !important/);
   assert.match(actionBlock, /min-width:\s*24px !important/);
   assert.match(actionBlock, /text-shadow:\s*none !important/);
-  assert.match(actionBlock, /padding:\s*0 4px !important/);
+  assert.match(actionBlock, /padding:\s*0 2px !important/);
   assert.doesNotMatch(actionBlock, /max-width:\s*\d+px/);
   assert.match(BOOST_WIDGET_CSS, /\.zbw-toast-line\s*\{[^}]*white-space:\s*normal/);
   assert.match(BOOST_WIDGET_CSS, /\.zbw-toast-line\s*\{[^}]*overflow-wrap:\s*anywhere/);
@@ -146,9 +147,24 @@ test("the Boost-owned card uses the readable grid, short actions, toast block an
   assert.match(paint, /popup.appendChild\(button\)/, "the four actions remain buttons");
   assert.match(paint, /restoreBadgeText\(restorableCount\(snapshot\)\)/);
   assert.match(paint, /aria-checked/);
-  assert.match(paint, /gameModeOn \? "● "/, "Game Mode ON has a visible non-color marker");
+  assert.match(paint, /if \(gameModeOn\) button\.setAttribute\("data-zbw-game-mode-on", "true"\)/);
+  assert.match(BOOST_WIDGET_CSS, /\.zbw-action\[data-zbw-game-mode-on="true"\]::before\s*\{[^}]*content:\s*"●"/,
+    "Game Mode ON keeps a visible non-color marker without squeezing its translated label");
   assert.match(BOOST_WIDGET_SRC, /labelEl\.textContent = text\("card\.title"\)/, "visible card title stays translated");
   assert.doesNotMatch(BOOST_WIDGET_CSS, /\.zbw-action\[disabled\][^{]*\{[^}]*opacity:/, "disabled action text is not dimmed");
+});
+
+test("Boost copies Widgets theme surfaces and the existing color overrides without the Widgets API", () => {
+  const themeSurface = /--zen-colors-tertiary,[\s\S]*?78%,\s*transparent/;
+  assert.match(BOOST_WIDGET_CSS, /background:\s*var\(--zbw-card-bg,[\s\S]*--zen-colors-tertiary[\s\S]*78%,\s*transparent/);
+  assert.match(WIDGETS_CSS, /background:\s*var\(--zw-card-bg,[\s\S]*--zen-colors-tertiary[\s\S]*78%,\s*transparent/);
+  assert.match(BOOST_WIDGET_CSS, themeSurface);
+  assert.match(BOOST_WIDGET_SRC, /copyWidgetAppearance\(root,\s*doc\.getElementById\?\.\(TRAY_ID\)\)/);
+  assert.match(BOOST_WIDGET_SRC, /--zw-card-bg/);
+  assert.match(BOOST_WIDGET_SRC, /--zw-card-text/);
+  assert.match(BOOST_SRC, /observeWidgetAppearanceChange:[\s\S]*?zen\.workspace\.zentral\.widgets\.appearance\.background[\s\S]*?zen\.workspace\.zentral\.widgets\.appearance\.text/);
+  assert.match(BOOST_WIDGET_CSS, /--zbw-card-bg/);
+  assert.match(BOOST_WIDGET_CSS, /--zbw-card-text/);
 });
 
 /* ---------------- docs / generated files / version ---------------- */

@@ -25,6 +25,15 @@
     "zen.workspace.zentral.widgets.boost.enabled"
   ],
   "externalPrefsReason": "OW-112 reads the retired keep_pinned pref once, to carry an owner's existing 'on' choice over to unload_pinned and use it as a read-only fallback for one release. W5 reads the retired Widgets Boost toggle once to migrate a saved value to Boost's widget_enabled preference; it is never cleared or exposed as a second setting.",
+  "borrowedSettings": [
+    {
+      "from": "additional/widgets/settings.json",
+      "properties": [
+        "zen.workspace.zentral.widgets.appearance.background",
+        "zen.workspace.zentral.widgets.appearance.text"
+      ]
+    }
+  ],
   "fullPackOnly": [
     "Zentral"
   ],

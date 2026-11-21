@@ -10,6 +10,7 @@ const ROOT = path.resolve(__dirname, "..");
 const read = (relative) => fs.readFileSync(path.join(ROOT, relative), "utf8");
 const CSS = read("additional/boost/ZentralBoostWidget.css").replace(/\/\*[\s\S]*?\*\//g, "");
 const WIDGET = read("additional/boost/ZentralBoostWidget.js");
+const WIDGETS_CSS = read("additional/widgets/ZentralWidgets.css");
 const BOOST = read("additional/boost/ZentralBoost.uc.js");
 const PREVIEW = read("docs/boost-widget-preview.html");
 
@@ -64,6 +65,45 @@ test("Boost color/background declarations avoid Zen accent and secondary-surface
   }
 });
 
+test("Boost default surfaces match Widgets theme colors instead of tinting every card white", () => {
+  const surface = /--zen-colors-tertiary,\s*var\(--toolbar-field-background-color,\s*rgba\(127,\s*127,\s*127,\s*0\.14\)\)\)\s*78%,\s*transparent/;
+  assert.match(CSS, /background:\s*var\(--zbw-card-bg,[\s\S]*--zen-colors-tertiary[\s\S]*78%,\s*transparent/);
+  assert.match(WIDGETS_CSS, /background:\s*var\(--zw-card-bg,[\s\S]*--zen-colors-tertiary[\s\S]*78%,\s*transparent/);
+  assert.match(CSS, surface, "Boost and Widgets use the same neutral tertiary surface blend");
+  assert.match(CSS, /color:\s*var\(--zbw-card-text,\s*var\(--zen-colors-text,\s*inherit\)\)/);
+  assert.match(CSS, /border:\s*1px solid color-mix\(in srgb,\s*currentColor 11%,\s*transparent\)/);
+  assert.match(CSS, /\.zbw-action,[\s\S]*?background:\s*transparent/);
+  assert.match(CSS, /background:\s*var\(--zw-hover,\s*rgba\(128,\s*128,\s*128,\s*0\.16\)\)/);
+  assert.doesNotMatch(CSS, /background:\s*color-mix\(in srgb,\s*currentColor 8%,\s*transparent\)/);
+});
+
+test("Boost mirrors Widgets background/text overrides and removes them on theme reset", () => {
+  const helpers = loadLookHelpers();
+  assert.equal(typeof helpers?.copyWidgetAppearance, "function");
+  const values = new Map();
+  const root = { style: {
+    getPropertyValue(name) { return values.get(name) || ""; },
+    setProperty(name, value) { values.set(name, String(value)); },
+    removeProperty(name) { values.delete(name); },
+  } };
+  const trayValues = new Map([["--zw-card-bg", " #202b38 "], ["--zw-card-text", "#edf2fa"]]);
+  const tray = { style: { getPropertyValue(name) { return trayValues.get(name) || ""; } } };
+  const copied = helpers.copyWidgetAppearance(root, tray);
+  assert.equal(copied.background, "#202b38");
+  assert.equal(copied.text, "#edf2fa");
+  assert.equal(values.get("--zbw-card-bg"), "#202b38");
+  assert.equal(values.get("--zbw-card-text"), "#edf2fa");
+  trayValues.clear();
+  const cleared = helpers.copyWidgetAppearance(root, tray);
+  assert.equal(cleared.background, "");
+  assert.equal(cleared.text, "");
+  assert.equal(values.has("--zbw-card-bg"), false);
+  assert.equal(values.has("--zbw-card-text"), false);
+  assert.match(WIDGET, /adapter\.observeWidgetAppearanceChange\(scheduleWidgetAppearanceSync\)/);
+  assert.match(BOOST, /zen\.workspace\.zentral\.widgets\.appearance\.background/);
+  assert.match(BOOST, /zen\.workspace\.zentral\.widgets\.appearance\.text/);
+});
+
 test("every Boost surface rule carries an explicit readable text color contract", () => {
   for (const rule of rules(CSS)) {
     if (!/(?:\.zbw-|#zentral-boost-widget)/.test(rule.selector)) continue;
@@ -76,15 +116,19 @@ test("every Boost surface rule carries an explicit readable text color contract"
       assert.match(color, /\binherit\b|currentColor|var\(--zen-colors-text/, `${rule.selector} inherits or follows current text`);
     }
   }
-  assert.match(CSS, /color:\s*var\(--zen-colors-text,\s*inherit\)/);
-  assert.match(CSS, /background:\s*color-mix\(in srgb,\s*currentColor 8%,\s*transparent\)/);
-  assert.match(CSS, /border:\s*1px solid color-mix\(in srgb,\s*currentColor 16%,\s*transparent\)/);
+  assert.match(CSS, /color:\s*var\(--zbw-card-text,\s*var\(--zen-colors-text,\s*inherit\)\)/);
+  assert.match(CSS, /background:\s*var\(--zbw-card-bg,[\s\S]*--zen-colors-tertiary/);
+  assert.match(CSS, /border:\s*1px solid color-mix\(in srgb,\s*currentColor 11%,\s*transparent\)/);
 });
 
-test("narrow actions are a 2x2 minmax grid and wide cards use the 280px container variant", () => {
+test("the 146px boundary keeps 2x2 labels readable before the compact four-action row", () => {
   assert.match(CSS, /container-type:\s*inline-size/);
   assert.match(CSS, /container-name:\s*zbw/);
   assert.match(CSS, /grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+  assert.match(CSS, /@container\s+zbw\s*\(min-width:\s*150px\)/);
+  assert.ok(146 < 150, "146 px card content stays in the readable 2x2 fallback");
+  assert.match(CSS, /font-size:\s*9px !important;\s*letter-spacing:\s*-0\.1px !important/);
+  assert.match(CSS, /\.zbw-action\[data-zbw-game-mode-on="true"\]::before/);
   assert.match(CSS, /@container\s+zbw\s*\(min-width:\s*280px\)/);
   assert.match(CSS, /@container\s+zbw\s*\(max-width:\s*130px\)/);
   assert.match(CSS, /flex-wrap:\s*wrap/);
@@ -92,7 +136,7 @@ test("narrow actions are a 2x2 minmax grid and wide cards use the 280px containe
   assert.doesNotMatch(CSS, /\.zbw-row[\s\S]{0,260}max-height:\s*26px/);
   assert.doesNotMatch(CSS, /\.zbw-action[^{}]*\{[^}]*max-width:\s*\d+px/i);
   assert.match(CSS, /\.zbw-action[\s\S]{0,500}min-height:\s*24px/);
-  assert.match(CSS, /\.zbw-action[\s\S]{0,500}height:\s*26px/);
+  assert.match(CSS, /\.zbw-action[\s\S]{0,500}height:\s*24px/);
   assert.match(CSS, /\.zbw-action[\s\S]{0,500}focus-visible/);
   assert.doesNotMatch(CSS, /\.zbw-label[^{}]*\{[^}]*text-overflow:\s*ellipsis/);
   assert.doesNotMatch(CSS, /-webkit-line-clamp|\.zbw-toast-line[^{}]*\{[^}]*overflow:\s*hidden/);
@@ -208,8 +252,9 @@ test("Restore badge output is compact and the DOM keeps the long count in title 
   assert.match(WIDGET, /data-zbw-action/);
 });
 
-test("preview covers five widths, all four themes, toast, Game Mode ON and the real contrast helper", () => {
-  assert.match(PREVIEW, /const widths = \[140, 170, 220, 300, 360\]/);
+test("preview covers the 146px readability check, four themes, toast, Game Mode ON and contrast helper", () => {
+  assert.match(PREVIEW, /const widths = \[140, 146, 170, 220, 300, 360\]/);
+  assert.match(PREVIEW, /146 px narrow check uses a readable 2×2 fallback/);
   assert.match(PREVIEW, /\$\{width\}px/);
   for (const theme of ["light", "dark", "owner-like", "bad"]) assert.match(PREVIEW, new RegExp(theme, "i"));
   assert.match(PREVIEW, /Game Mode:/);
@@ -218,6 +263,8 @@ test("preview covers five widths, all four themes, toast, Game Mode ON and the r
   assert.match(PREVIEW, /Restore/);
   assert.match(PREVIEW, /label\.textContent = "Memory Boost"/);
   assert.match(PREVIEW, /applyContrastSafety/);
+  assert.match(PREVIEW, /Widgets appearance override/);
+  assert.match(PREVIEW, /copyWidgetAppearance/);
   assert.match(PREVIEW, /ZentralBoostWidget\.css/);
   const inlineScript = PREVIEW.match(/<script>\s*([\s\S]*?)<\/script>/)?.[1];
   assert.ok(inlineScript, "preview has its dynamic DOM renderer");

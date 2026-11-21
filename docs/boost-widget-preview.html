@@ -13,11 +13,13 @@
     .theme { margin: 18px 0; padding: 14px; border: 1px solid color-mix(in srgb, currentColor 22%, transparent); border-radius: 12px; }
     .theme h2 { margin: 0 0 10px; font-size: 17px; }
     .theme p { margin: 0 0 12px; color: color-mix(in srgb, currentColor 80%, transparent); font-size: 12px; }
-    .theme-light { --zen-colors-text: #1b1b1d; --zen-primary-color: #3157a4; --zen-colors-secondary: #e7e7e9; color: var(--zen-colors-text); background: #fff; }
-    .theme-dark { --zen-colors-text: #f3f3f3; --zen-primary-color: #8c7cff; --zen-colors-secondary: #292a2d; color: var(--zen-colors-text); background: #1e1f22; }
-    .theme-owner-like { --zen-colors-text: #ffffff; --zen-primary-color: #1b1b1b; --zen-colors-secondary: #252525; color: var(--zen-colors-text); background: #252525; }
-    .theme-bad { --zen-colors-text: #282828; --zen-primary-color: #272727; --zen-colors-secondary: #272727; color: var(--zen-colors-text); background: #272727; }
+    .theme-light { --zen-colors-text: #1b1b1d; --zen-primary-color: #3157a4; --zen-colors-secondary: #e7e7e9; --zen-colors-tertiary: #e8e8ea; color: var(--zen-colors-text); background: #fff; }
+    .theme-dark { --zen-colors-text: #f3f3f3; --zen-primary-color: #8c7cff; --zen-colors-secondary: #292a2d; --zen-colors-tertiary: #33363c; color: var(--zen-colors-text); background: #1e1f22; }
+    .theme-owner-like { --zen-colors-text: #ffffff; --zen-primary-color: #1b1b1b; --zen-colors-secondary: #252525; --zen-colors-tertiary: #393939; color: var(--zen-colors-text); background: #252525; }
+    .theme-bad { --zen-colors-text: #282828; --zen-primary-color: #272727; --zen-colors-secondary: #272727; --zen-colors-tertiary: #272727; color: var(--zen-colors-text); background: #272727; }
     .sample-lane { display: flex; align-items: flex-start; gap: 14px; overflow-x: auto; padding: 4px 2px 14px; }
+    .override-pair { display: flex; gap: 10px; align-items: flex-start; }
+    .widget-swatch { box-sizing: border-box; width: 170px; padding: 3px 4px; border: 1px solid color-mix(in srgb, currentColor 11%, transparent); border-radius: 8px; background: var(--zw-card-bg); color: var(--zw-card-text); font: 10px/1.2 system-ui, sans-serif; }
     .sample { flex: 0 0 auto; }
     .sample-label { margin: 0 0 5px; font-size: 11px; font-weight: 600; }
     .demo-frame { box-sizing: border-box; padding: 0; border: 1px dashed color-mix(in srgb, currentColor 36%, transparent); }
@@ -29,12 +31,12 @@
 </head>
 <body>
   <h1>Boost widget: narrow sidebar preview</h1>
-  <p class="intro">This static page loads the shipped <code>ZentralBoostWidget.css</code> and the same one-shot contrast helper used by the card. Each theme shows 140, 170, 220, 300 and 360 CSS-pixel host widths; the outlined sample is 170 px. The bad theme should gain the luminance-matched forced palette automatically.</p>
+  <p class="intro">This static page loads the shipped <code>ZentralBoostWidget.css</code> and the same one-shot contrast helper used by the card. Each theme shows 140, 146, 170, 220, 300 and 360 CSS-pixel host widths; the 146 px narrow check uses a readable 2×2 fallback, while the outlined 170 px target has enough content for one compact row. The actions use 24 px targets, and Restore's count badge must stay inside its button. The separate custom-colors sample shows a Boost card mirroring the existing Widgets appearance override. The deliberately bad theme should gain the luminance-matched forced palette automatically.</p>
   <main id="previews"></main>
   <script src="../additional/boost/ZentralBoostWidget.js"></script>
   <script>
     (() => {
-      const widths = [140, 170, 220, 300, 360];
+      const widths = [140, 146, 170, 220, 300, 360];
       const themes = [
         { id: "light", title: "Light", note: "Light sidebar text and surface.", className: "theme-light" },
         { id: "dark", title: "Dark", note: "Dark sidebar with a readable light text color.", className: "theme-dark" },
@@ -74,7 +76,8 @@
           button.className = "zbw-action";
           button.setAttribute("data-zbw-action", action);
           button.setAttribute("aria-label", extra.ariaLabel || text);
-          button.textContent = extra.marker ? "● " + text : text;
+          button.textContent = text;
+          if (extra.marker) button.setAttribute("data-zbw-game-mode-on", "true");
           if (extra.checked !== undefined) {
             button.setAttribute("role", "switch");
             button.setAttribute("aria-checked", String(extra.checked));
@@ -136,7 +139,7 @@
           sample.className = "sample";
           const sampleLabel = document.createElement("div");
           sampleLabel.className = "sample-label";
-          sampleLabel.textContent = `${width}px${width === 170 ? " · target" : ""}`;
+          sampleLabel.textContent = `${width}px${width === 146 ? " · narrow check" : width === 170 ? " · target" : ""}`;
           const frame = document.createElement("div");
           frame.className = "demo-frame";
           frame.dataset.width = String(width);
@@ -148,6 +151,37 @@
         section.append(heading, note, lane);
         host.appendChild(section);
       }
+
+      const overrideSection = document.createElement("section");
+      overrideSection.className = "theme theme-dark";
+      overrideSection.dataset.theme = "widgets-override";
+      const overrideHeading = document.createElement("h2");
+      overrideHeading.textContent = "Widgets appearance override";
+      const overrideNote = document.createElement("p");
+      overrideNote.textContent = "The first swatch is the Widgets tray color choice; Boost copies the same background and text tokens.";
+      const overridePair = document.createElement("div");
+      overridePair.className = "override-pair";
+      const tray = document.createElement("div");
+      tray.style.setProperty("--zw-card-bg", "#28384c");
+      tray.style.setProperty("--zw-card-text", "#eff4fa");
+      const widgetFrame = document.createElement("div");
+      widgetFrame.className = "demo-frame";
+      widgetFrame.style.width = "170px";
+      const widgetSwatch = document.createElement("div");
+      widgetSwatch.className = "widget-swatch";
+      widgetSwatch.style.setProperty("--zw-card-bg", "#28384c");
+      widgetSwatch.style.setProperty("--zw-card-text", "#eff4fa");
+      widgetSwatch.textContent = "Normal Widgets card";
+      widgetFrame.appendChild(widgetSwatch);
+      const boostFrame = document.createElement("div");
+      boostFrame.className = "demo-frame";
+      boostFrame.style.width = "170px";
+      const boostSample = makeCard(170);
+      module?.copyWidgetAppearance?.(boostSample, tray);
+      boostFrame.appendChild(boostSample);
+      overridePair.append(widgetFrame, boostFrame);
+      overrideSection.append(overrideHeading, overrideNote, overridePair);
+      host.appendChild(overrideSection);
 
       requestAnimationFrame(() => {
         for (const card of document.querySelectorAll(".zbw-card"))

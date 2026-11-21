@@ -1,6 +1,6 @@
 /* Boost-owned sidebar widget. The standalone package and full-pack CSS catalog
- * load this same stylesheet. Narrow sidebars use a readable two-row, 2x2 action
- * grid; the wide fallback returns to one compact row. */
+ * load this same stylesheet. At a 170 px sidebar the actions share one compact
+ * row; only genuinely narrower cards fall back to the 2x2 layout. */
 #zentral-boost-widget-anchor {
   position: fixed;
   width: 1px;
@@ -20,17 +20,21 @@
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   width: calc(100% - 8px);
   min-width: 0;
   max-width: 360px;
   margin: 2px 4px;
-  padding: 4px 5px;
-  font: 11px/1.2 system-ui, sans-serif;
-  color: var(--zen-colors-text, inherit);
-  background: color-mix(in srgb, currentColor 8%, transparent);
-  border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
-  border-radius: 10px;
+  padding: 3px 2px;
+  font: 10px/1.2 system-ui, sans-serif;
+  color: var(--zbw-card-text, var(--zen-colors-text, inherit));
+  background: var(--zbw-card-bg, color-mix(
+    in srgb,
+    var(--zen-colors-tertiary, var(--toolbar-field-background-color, rgba(127, 127, 127, 0.14))) 78%,
+    transparent
+  ));
+  border: 1px solid color-mix(in srgb, currentColor 11%, transparent);
+  border-radius: var(--zw-radius, 8px);
 }
 
 #zentral-boost-widget[hidden],
@@ -65,7 +69,7 @@
 .zbw-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
 }
 
@@ -73,16 +77,16 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
-  line-height: 1.15;
+  line-height: 1.1;
 }
 
 .zbw-value {
   flex: 0 1 auto;
   min-width: 0;
   max-width: 100%;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
@@ -101,7 +105,7 @@
   flex: 0 1 auto;
   min-width: 0;
   color: color-mix(in srgb, currentColor 80%, transparent);
-  font-size: 10px;
+  font-size: 9px;
   overflow-wrap: anywhere;
   text-align: right;
   white-space: normal;
@@ -110,7 +114,7 @@
 .zbw-popup {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
 }
 
@@ -127,15 +131,15 @@
   width: 100%;
   min-width: 24px !important;
   min-height: 24px !important;
-  height: 26px !important;
+  height: 24px !important;
   margin: 0 !important;
-  padding: 0 4px !important;
-  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
-  border-radius: 7px;
-  background: color-mix(in srgb, currentColor 8%, transparent);
+  padding: 0 2px !important;
+  border: 1px solid var(--zw-line, rgba(128, 128, 128, 0.28));
+  border-radius: 6px;
+  background: transparent;
   color: inherit;
   box-shadow: none !important;
-  font: 11px/1 system-ui, sans-serif !important;
+  font: 9px/1 system-ui, sans-serif !important;
   font-weight: 500 !important;
   text-align: center;
   text-shadow: none !important;
@@ -145,13 +149,13 @@
 
 .zbw-action:hover:not([disabled]),
 .zbw-toast-action:hover {
-  background: color-mix(in srgb, currentColor 16%, transparent);
+  background: var(--zw-hover, rgba(128, 128, 128, 0.16));
   color: inherit;
 }
 
 .zbw-action:active:not([disabled]),
 .zbw-toast-action:active {
-  background: color-mix(in srgb, currentColor 22%, transparent);
+  background: color-mix(in srgb, currentColor 20%, transparent);
   color: inherit;
 }
 
@@ -162,8 +166,8 @@
 }
 
 .zbw-action[aria-checked="true"] {
-  background: color-mix(in srgb, currentColor 22%, transparent);
-  border-color: color-mix(in srgb, currentColor 45%, transparent);
+  background: var(--zw-hover, rgba(128, 128, 128, 0.16));
+  border-color: var(--zw-line, rgba(128, 128, 128, 0.28));
   color: inherit;
 }
 
@@ -171,12 +175,20 @@
   cursor: default;
 }
 
+.zbw-action[data-zbw-game-mode-on="true"]::before {
+  content: "●";
+  flex: 0 0 auto;
+  margin-right: 1px;
+  font-size: 7px;
+  line-height: 1;
+}
+
 .zbw-action-count {
   flex: 0 0 auto;
   padding: 1px 2px;
-  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border: 1px solid var(--zw-line, rgba(128, 128, 128, 0.28));
   border-radius: 5px;
-  background: color-mix(in srgb, currentColor 12%, transparent);
+  background: var(--zw-hover, rgba(128, 128, 128, 0.16));
   color: inherit;
   font-size: 9px;
   font-weight: 600;
@@ -214,6 +226,33 @@
     padding: 0 2px !important;
     font-size: 10px !important;
     white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .zbw-action-count {
+    padding: 0 1px;
+    font-size: 7px;
+  }
+}
+
+/* At 146 px of card content the 2x2 fallback is clearer. A 170 px sidebar
+   supplies about 150 px of content, enough for one compact row without clipping
+   the translated labels or Restore count badge inside the 24 px targets. */
+@container zbw (min-width: 150px) {
+  .zbw-popup {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 2px;
+  }
+
+  .zbw-action {
+    flex-wrap: wrap;
+    gap: 0;
+    padding: 0 !important;
+    font-size: 9px !important;
+    letter-spacing: -0.1px !important;
+    line-height: 1 !important;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .zbw-action-count {

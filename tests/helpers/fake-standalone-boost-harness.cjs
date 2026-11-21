@@ -442,6 +442,13 @@ function createFakeStandaloneBoostHarness(options = {}) {
     emitMutations(records) {
       for (const observer of [...mutationObservers]) observer.deliver(records);
     },
+    notifyPrefChange(key) {
+      const changed = String(key || "");
+      for (const [prefix, observer] of [...prefObservers]) {
+        if (changed === prefix || changed.startsWith(prefix))
+          observer.observe(null, "nsPref:changed", changed);
+      }
+    },
     api: () => win.ZentralBoost || null,
     card: () => doc.getElementById("zentral-boost-widget"),
     anchor: () => doc.getElementById("zentral-boost-widget-anchor"),

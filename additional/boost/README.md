@@ -36,13 +36,19 @@ sidebar chrome. No overlay is used in this main mode. If no safe target exists, 
 small anchor fallback. Hidden and compact-hidden sidebar states are CSS-controlled; turning the sidebar back on
 reveals the same tile without a polling loop.
 
-On a narrow (~170 px) sidebar the widget shows a bold RAM value and translated **Memory Boost** label above a readable **2×2** grid:
-**Light**, **Deep**, **Game** and **Restore**. The card intentionally grows to roughly 85–90 px before any toast; at
-container widths of 280 px and above the value and four actions return to one compact row. Restore keeps its short
-visible label plus a count badge, while the full app/tab counts remain in its tooltip and accessible name. Result,
-Game Mode and Restore feedback is a wrapped block below the grid, with a full-width action when needed. The shipped
-preview is `docs/boost-widget-preview.html` (four themes, five widths). The card uses the sidebar text color and a
-translucent current-text tint; a one-shot contrast check applies a self-contained dark/light palette only when the
+On a narrow (~170 px) sidebar the widget shows a bold RAM value and translated **Memory Boost** label above one
+compact row of four actions: **Light**, **Deep**, **Game** and **Restore**. The 24 px buttons share a row from 150 px
+of card content; a 146 px card keeps the readable 2×2 fallback so the translated labels and Restore count stay inside
+their buttons. At 280 px and above, the value and four actions use the wide container layout. Restore keeps its short
+visible label plus a count badge, while the full app/tab counts remain in its tooltip and accessible name. Result, Game Mode and Restore feedback stays in a wrapped block below the
+actions, with a full-width action when needed.
+
+The default card surface uses the same `--zen-colors-tertiary` 78% blend, text token and neutral button colors as
+ordinary Widgets cards, rather than tinting the dark sidebar with white text color. When Widgets' existing
+`appearance.background` or `appearance.text` override changes, Boost mirrors the tray's `--zw-card-bg` and
+`--zw-card-text` onto its own card; it reads no Widgets API and releases both preference observers with the card.
+Resetting those preferences returns Boost to the theme surface. The shipped preview is `docs/boost-widget-preview.html`
+(four themes, six widths including the 146 px narrow check). A one-shot contrast check applies a self-contained dark/light palette only when the
 measured text/background ratio falls below 4.5. Both flow and fallback mount modes share these styles. Each action
 keeps its deterministic tooltip in English and Polish:
 

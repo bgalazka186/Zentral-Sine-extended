@@ -3290,6 +3290,38 @@
               }
             };
           },
+          observeWidgetAppearanceChange: (callback) => {
+            const releases = [];
+            for (const pref of [
+              "zen.workspace.zentral.widgets.appearance.background",
+              "zen.workspace.zentral.widgets.appearance.text",
+            ]) {
+              if (typeof lifecycle?.preference === "function") {
+                try {
+                  const release = lifecycle.preference(pref, callback);
+                  if (typeof release === "function") releases.push(release);
+                  continue;
+                } catch (_) {}
+              }
+              const observer = {
+                observe(_subject, _topic, data) {
+                  if (!data || data === pref) callback();
+                },
+              };
+              try {
+                Services.prefs.addObserver(pref, observer);
+                releases.push(() => Services.prefs.removeObserver(pref, observer));
+              } catch (_) {}
+            }
+            let active = true;
+            return () => {
+              if (!active) return;
+              active = false;
+              for (const release of releases.splice(0).reverse()) {
+                try { release(); } catch (_) {}
+              }
+            };
+          },
           setTimeout: (callback, delay) => lifecycle?.setTimeout
             ? lifecycle.setTimeout(callback, delay)
             : setTimer(callback, delay),

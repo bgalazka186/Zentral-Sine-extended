@@ -1,19 +1,23 @@
 # OW-121 — Boost UX: responsive, readable widget
 
-Date: 2026-11-19; narrow-sidebar readability follow-up: 2026-11-21. Current repository version is **3.4.3**.
+Date: 2026-11-19; narrow-sidebar readability and compact-color follow-ups: 2026-11-21. Current repository version is **3.4.3**.
 
-The original OW-121 request was to add the four Boost actions without growing the old compact menu. A later owner-directed
-readability pass replaces that one-row constraint at narrow widths: a 2×2 action grid and a readable value/label are
-preferred over clipping or ellipses in the 170 px sidebar. The original language semantics, action IDs, level attributes,
-click behavior, Restore details, seating, Widgets independence and Game Mode engine remain unchanged.
+The original OW-121 request was to add the four Boost actions without growing the old compact menu. The owner later
+asked for readability at 170 px, then corrected the resulting card as too white and roughly three times too tall. The
+current target is a compact single row of four readable actions at 170 px, matching the normal Widgets card palette
+and mirroring its existing optional background/text overrides. Only genuinely narrower cards fall back to 2×2. The
+original language semantics, action IDs, level attributes, click behavior, Restore details, seating, Widgets API
+independence and Game Mode engine remain unchanged.
 
 ## 1. Responsive, readable action grid
 
-The existing inline popup stays in normal flow. Under 280 px the four compact buttons use a **2×2 grid** with short
-visible labels; at and above 280 px they use a one-row four-column layout. The header preserves the existing translated
-`card.title` text beside the RAM value. Action labels use the existing short EN/PL strings; action titles and accessible
-names keep the full translated descriptions and Restore counts. The old vertical "more actions" note and the OW-115
-disabled explanation row are not appended.
+The existing inline popup stays in normal flow. At a 170 px sidebar, about 150 px of card content uses a **single row
+of four 24 px actions** with short visible labels. The 146 px card-content boundary uses the **2×2 grid** so every
+label and the Restore badge fit inside their button; below 150 px the same readable fallback applies. At 280 px and
+above, the header and four-action row use the wide container layout. The header preserves the
+translated `card.title` beside the RAM value. Action labels use existing short EN/PL strings; action titles and
+accessible names keep full descriptions and Restore counts. The old vertical "more actions" note and OW-115 disabled
+explanation row are not appended.
 
 ## 2. Deep clean also does Light clean
 
@@ -36,30 +40,40 @@ The Deep card's tooltip also folds in the OW-115 grouped skip reasons and pinned
 
 ## Responsive layout, contrast and status
 
-`additional/boost/ZentralBoostWidget.css` owns the responsive card: a 2×2 narrow action grid switches to four columns at
-280 px, with no fixed 26 px row or forced text clipping. The translated card title and RAM value share the header; narrow actions use
-short translated labels, and Restore shows a compact count badge while preserving the long title/ARIA count. Toasts are
-multiline blocks with a full-width action when one is present. Game Mode ON retains its checked state and a visible marker.
+`additional/boost/ZentralBoostWidget.css` owns the responsive card: 150–279 px uses one compact row of four actions,
+under 150 px uses the 2×2 fallback, and at 280 px the header joins the action row. Action buttons are 24 px tall;
+the 146 px boundary uses two columns so short labels and Restore's compact count badge fit without overflowing. Restore
+preserves the long title/ARIA count.
+Toasts are multiline blocks with a full-width action when one is present. Game Mode ON retains its checked state and
+visible marker; the marker is CSS-drawn so it does not reduce the translated action label's width.
 
-The localized `card.title` and value share the header. The sidebar text color and text-derived translucent surfaces and
-buttons are used throughout. Toast copy wraps in full without line clamping, and disabled action text is not dimmed. A
-pure WCAG contrast helper composites ancestor alpha backgrounds for at most 12 levels; one-shot checks run at mount,
-card paints/refreshes, workspace switches and dark-scheme changes. Below 4.5, a luminance-selected self-contained palette
-is activated by `data-zbw-contrast="forced"`. There is no polling and no root-style observer. Hidden/compact and
-`[hidden]` rules remain unchanged. Automated source/DOM checks and the shipped `docs/boost-widget-preview.html` are not
-live browser evidence.
+The default card surface, text token and neutral button treatments match the normal Widgets card: the background uses
+the same `--zen-colors-tertiary` 78% blend rather than tinting with the text color. Boost reads the Widgets tray's
+existing `--zw-card-bg` / `--zw-card-text` inline overrides and mirrors them to its own card. The existing two
+appearance preferences are observed with one-shot, lifecycle-owned listeners; a 0 ms scoped callback lets Widgets
+finish repainting its tray first. Reset removes the local copies and returns to the theme. This reads no
+`ZentralWidgets` API and installs no polling or tray/root style observer.
+
+Toast copy wraps in full without line clamping, and disabled action text is not dimmed. A pure WCAG contrast helper
+composites ancestor alpha backgrounds for at most 12 levels; one-shot checks run at mount, card paints/refreshes,
+workspace switches and dark-scheme changes. Below 4.5, a luminance-selected self-contained palette is activated by
+`data-zbw-contrast="forced"`. Hidden/compact and `[hidden]` rules remain unchanged. Automated source/DOM checks and the
+shipped `docs/boost-widget-preview.html` are not live browser evidence.
 
 ## Validation
 
-- Historical OW-121 validation and suite totals remain above as a snapshot; the current responsive restyle is covered by `tests/boost-widget-look.test.cjs` (9/9), `tests/ow-121-boost-ux.test.cjs` (5/5), `tests/boost-standalone-widget.test.cjs` (15/15) and `tests/g7-game-mode-feedback.test.cjs` (9/9).
-- The standalone source rebuild/check (`node tools/build-standalone.cjs --keep-version && node tools/build-standalone.cjs --check`) passes. The exact release/build/test chain for this follow-up is recorded in the current handoff; no generated bundle or lock is hand-edited.
+- Current focused checks: `tests/boost-widget-look.test.cjs` 11/11, `tests/ow-121-boost-ux.test.cjs` 6/6, `tests/boost-standalone-widget.test.cjs` 16/16, `tests/boost-widget-coexistence.test.cjs` 13/13 and `tests/g7-game-mode-feedback.test.cjs` 9/9. The standalone fake-window case exercises initial override copy, both live preference updates, reset and listener teardown.
+- Headless Chromium rendered the static preview in all four themes at 146 px host width and the 170 px target, and added an exact 146 px card-content clone in each theme. The host sample yields 130 px of content; both 146 px cases use 2×2, while the target retains one row. At every tested size, button labels and the Restore badge stay within the 24 px targets with no scroll overflow.
+- The initial prescribed chain was inadvertently run with `--bump`, briefly advancing the version from 3.4.3 to 3.4.4 without owner authorization. The bump was restored through repository tooling: source version declarations returned to 3.4.3, `node tools/sync-version.cjs --set 3.4.3`, `node tools/build-standalone.cjs --keep-version`, then preferences/z-map generation and build/version checks. Final: 607 generated Sine preferences (144 with free numeric entry), z-map 42/72/3, standalone packages current and all version markers 3.4.3. `node tests/run-all.cjs`: **313/313 test files passed, 0 failed, 0 TODO failures**. No generated bundle or lock is hand-edited.
 
 *Historical snapshot:* the `599 Sine preferences` and `282/282` figures above belong to the OW-121 cycle. Later `OW-127` added two prefs (`601`) and the post-batch regression sweep raised the docs-inclusive suite to `294/294`; see `docs/bugfix-2026-11-18.md`.
 
 ## OWNER GATES — OPEN
 
-No live Zen/Sine runtime or screenshot is available here. Inspect `docs/boost-widget-preview.html` at 170 px in its light,
-dark, owner-like and deliberately low-contrast themes, confirming value/label, all four actions, Restore badge, Game Mode
-ON and multiline toast are readable and unclipped. Then verify the real 170 px sidebar in light and dark, including the
-value, four buttons, badge and Game Mode toast. Historical W1–W7 gates also remain open until their owner evidence arrives.
-Real RAM figures, frame rate or live visual results are not claimed as measured here.
+A headless Chromium render checked the static preview at 146 px host width, exact 146 px card content and the 170 px
+target in its light, dark, owner-like and deliberately low-contrast themes. The host sample provides 130 px of card
+content; both 146 px cases use 2×2, and all action labels and Restore badges fit inside their 24 px buttons. This is not
+a live Zen/Sine sidebar result. Owner-check the 170 px
+sidebar in light and dark, including value, four buttons, badge, Game Mode toast and live Widgets override change/reset.
+Historical W1–W7 gates also remain open until their owner evidence arrives. Real RAM figures, frame rate or live sidebar
+visual results are not claimed as measured here.

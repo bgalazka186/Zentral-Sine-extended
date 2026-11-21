@@ -164,5 +164,17 @@
         "value": "never"
       }
     ]
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.appearance.background",
+    "label": "Card background colour (#rrggbb or empty to follow the theme)",
+    "type": "string",
+    "defaultValue": ""
+  },
+  {
+    "property": "zen.workspace.zentral.widgets.appearance.text",
+    "label": "Card text colour (#rrggbb or empty to follow the theme)",
+    "type": "string",
+    "defaultValue": ""
   }
 ]

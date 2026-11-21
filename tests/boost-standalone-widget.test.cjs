@@ -268,18 +268,23 @@ test("standalone keeps the existing hover fallback when the shared safe selector
   assert.equal(h.mutationObservers.size, 0);
 });
 
-test("both loaders point at one Boost-owned source and the responsive two-row action grid", () => {
+test("both loaders point at one Boost-owned source and the compact 170 px action row", () => {
   assert.deepEqual(MANIFEST.include, ["ZentralBoostWidget.js"]);
   assert.equal(MANIFEST.extras, undefined);
   assert.equal(MANIFEST.loader, "__zentralBoostLoader");
   assert.ok(MANIFEST.sharedSources.includes("loader/ZentralSidebarMount.js"));
   assert.ok(json("additional/widgets/standalone.json").sharedSources.includes("loader/ZentralSidebarMount.js"));
   assert.equal(THEME.style.chrome, "ZentralBoostWidget.css");
+  assert.deepEqual(MANIFEST.borrowedSettings?.find((entry) => entry.from === "additional/widgets/settings.json")?.properties, [
+    "zen.workspace.zentral.widgets.appearance.background",
+    "zen.workspace.zentral.widgets.appearance.text",
+  ]);
   assert.match(CATALOG, /extraSources:\s*\["loader\/ZentralSidebarMount\.js",\s*"additional\/boost\/ZentralBoostWidget\.js"\]/);
   assert.match(CATALOG, /id:\s*"widgets"[\s\S]{0,130}extraSources:\s*\["loader\/ZentralSidebarMount\.js"\]/);
   assert.match(CATALOG, /id:\s*"BoostWidget"[\s\S]{0,140}file:\s*"additional\/boost\/ZentralBoostWidget\.css"[\s\S]{0,80}owners:\s*\["boost"\]/);
   assert.match(CSS, /container-type:\s*inline-size/);
   assert.match(CSS, /grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+  assert.match(CSS, /@container\s+zbw\s*\(min-width:\s*150px\)/);
   assert.match(CSS, /@container\s+zbw\s*\(min-width:\s*280px\)/);
   assert.doesNotMatch(CSS, /max-height:\s*26px|overflow:\s*hidden\s*!important/);
   assert.match(CSS, /\.zbw-action/);
@@ -319,6 +324,50 @@ test("standalone Boost mounts one visible card with RAM and all four actions", a
   assert.equal(card.querySelector(".zbw-value").textContent, "512 MB");
   assert.equal(h.calls.startSampling, 1);
   h.destroy();
+});
+
+test("Boost copies Widgets card colors initially, follows override changes, and clears them on reset", async () => {
+  const bgPref = "zen.workspace.zentral.widgets.appearance.background";
+  const textPref = "zen.workspace.zentral.widgets.appearance.text";
+  const h = createFakeStandaloneBoostHarness({ instrumentApi: null, prefs: { [bgPref]: "", [textPref]: "" } });
+  const tray = h.doc.createElement("vbox");
+  tray.id = "zentral-sidebar-widgets";
+  tray.style.setProperty("--zw-card-bg", "#222b38");
+  tray.style.setProperty("--zw-card-text", "#edf2fa");
+  h.doc.documentElement.appendChild(tray);
+  await h.boot();
+
+  const card = h.card();
+  assert.ok(card, "the Boost tile mounts beside the Widgets tray");
+  assert.equal(card.style.getPropertyValue("--zbw-card-bg"), "#222b38");
+  assert.equal(card.style.getPropertyValue("--zbw-card-text"), "#edf2fa");
+  assert.equal(h.prefObservers.filter(([pref]) => pref === bgPref || pref === textPref).length, 2,
+    "both existing Widgets appearance preferences are watched");
+
+  tray.style.setProperty("--zw-card-bg", "#172d25");
+  tray.style.setProperty("--zw-card-text", "#e4f5e8");
+  h.prefs.set(bgPref, "#172d25");
+  h.prefs.set(textPref, "#e4f5e8");
+  h.notifyPrefChange(bgPref);
+  h.notifyPrefChange(textPref);
+  await h.flush(0);
+  assert.equal(card.style.getPropertyValue("--zbw-card-bg"), "#172d25", "the background follows a live override");
+  assert.equal(card.style.getPropertyValue("--zbw-card-text"), "#e4f5e8", "the text follows a live override");
+
+  tray.style.removeProperty("--zw-card-bg");
+  tray.style.removeProperty("--zw-card-text");
+  h.prefs.set(bgPref, "");
+  h.prefs.set(textPref, "");
+  h.notifyPrefChange(bgPref);
+  h.notifyPrefChange(textPref);
+  await h.flush(0);
+  assert.equal(card.style.getPropertyValue("--zbw-card-bg"), "", "reset returns the card to the theme surface");
+  assert.equal(card.style.getPropertyValue("--zbw-card-text"), "", "reset returns the text to the theme color");
+
+  h.destroy();
+  assert.equal(h.prefObservers.filter(([pref]) => pref === bgPref || pref === textPref).length, 0,
+    "appearance observers are removed with the card");
+  assert.equal(h.timers.size, 0);
 });
 
 test("a Widgets-shaped global is ignored; it cannot register, take over or suppress the Boost tile", async () => {
@@ -406,7 +455,7 @@ test("OW-121 keeps the readable action grid, short Restore badge, tooltips and s
   assert.equal(tile.querySelector(".zbw-label").textContent, "Memory Boost", "the visible label keeps card.title translation semantics");
   assert.match(CSS, /grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
   assert.doesNotMatch(CSS, /max-height:\s*26px|overflow:\s*hidden\s*!important/);
-  assert.match(CSS, /\.zbw-action[\s\S]{0,500}height:\s*26px\s*!important/);
+  assert.match(CSS, /\.zbw-action[\s\S]{0,500}height:\s*24px\s*!important/);
   assert.match(h.action("free-light").getAttribute("title"), /Light: GC\/CC \+ memory minimize\. No tabs touched\./);
   assert.match(h.action("free-deep").getAttribute("title"), /Restore available\./);
   assert.match(h.action("game-mode").getAttribute("title"), /pauses repeating features/);
@@ -418,7 +467,9 @@ test("OW-121 keeps the readable action grid, short Restore badge, tooltips and s
   h.fire(h.action("game-mode"), "click");
   await h.flush(0);
   assert.equal(h.action("game-mode").getAttribute("aria-checked"), "true");
-  assert.equal(h.action("game-mode").textContent, "● Game", "ON is marked without color alone");
+  assert.equal(h.action("game-mode").textContent, "Game", "the short translated label stays compact");
+  assert.equal(h.action("game-mode").getAttribute("data-zbw-game-mode-on"), "true",
+    "the visible CSS marker does not consume label width");
 
   const api = h.api();
   const items = api.widgetMenu({

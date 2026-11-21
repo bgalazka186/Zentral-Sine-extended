@@ -1353,6 +1353,29 @@ const __zentralEmbeddedLoader = (function () {
     return count > 99 ? "99+" : String(count);
   }
 
+  // Widgets owns these overrides on its tray. Boost stays an independent card
+  // owner, so mirror only the two public appearance tokens onto our own root.
+  function copyWidgetAppearance(element, tray) {
+    const values = { background: "", text: "" };
+    const tokens = [
+      ["background", "--zw-card-bg", "--zbw-card-bg"],
+      ["text", "--zw-card-text", "--zbw-card-text"],
+    ];
+    for (const [key, source, target] of tokens) {
+      let value = "";
+      try { value = String(tray?.style?.getPropertyValue?.(source) || "").trim(); } catch (_) {}
+      values[key] = value;
+      let current = "";
+      try { current = String(element?.style?.getPropertyValue?.(target) || "").trim(); } catch (_) {}
+      if (current === value) continue;
+      try {
+        if (value) element?.style?.setProperty?.(target, value);
+        else element?.style?.removeProperty?.(target);
+      } catch (_) {}
+    }
+    return values;
+  }
+
   function mountBoostWidget(options = {}) {
     const window = options.window || targetWindow;
     const doc = options.document || window.document;
@@ -1517,6 +1540,8 @@ function createCard({ root, mode }) {
   const actionReleases = [];
   let actionToastRelease = null;
   let toastTimer = null;
+  let appearanceTimer = null;
+  let widgetAppearance = null;
   let running = false;
   let subscribed = false;
   let sampling = false;
@@ -1597,6 +1622,24 @@ function createCard({ root, mode }) {
     applyContrastSafety(root);
   }
 
+  function syncWidgetAppearance() {
+    if (cardDisposed) return null;
+    const next = copyWidgetAppearance(root, doc.getElementById?.(TRAY_ID));
+    if (widgetAppearance && next.background === widgetAppearance.background && next.text === widgetAppearance.text)
+      return next;
+    widgetAppearance = next;
+    updateContrast();
+    return next;
+  }
+
+  function scheduleWidgetAppearanceSync() {
+    if (cardDisposed || appearanceTimer !== null) return;
+    appearanceTimer = setTimer(() => {
+      appearanceTimer = null;
+      syncWidgetAppearance();
+    }, 0);
+  }
+
   function paintValue() {
     const api = boostApi();
     let mb = null;
@@ -1660,7 +1703,8 @@ function createCard({ root, mode }) {
       if (item.level) button.setAttribute("data-zbw-level", item.level);
       const shortLabel = item.shortLabel || item.label || item.id;
       const gameModeOn = item.id === "game-mode" && item.checked === true;
-      button.textContent = (gameModeOn ? "● " : "") + shortLabel;
+      button.textContent = shortLabel;
+      if (gameModeOn) button.setAttribute("data-zbw-game-mode-on", "true");
       button.setAttribute("aria-label", item.label || item.shortLabel || item.id);
       const hints = [item.description, item.hint];
       if (item.id === "free-deep" && skippedInfo) hints.push(skippedInfo.label, skippedInfo.hint);
@@ -1903,6 +1947,10 @@ function createCard({ root, mode }) {
   function teardown() {
     if (cardDisposed) return;
     cardDisposed = true;
+    if (appearanceTimer !== null) {
+      clearTimer(appearanceTimer);
+      appearanceTimer = null;
+    }
     stop();
     clearToast();
     clearActions();
@@ -1925,11 +1973,19 @@ function createCard({ root, mode }) {
     runAction,
     showToast,
     previewHint,
+    syncAppearance: syncWidgetAppearance,
     start,
     stop,
     dispose: teardown,
   };
   cardInstances.add(instance);
+  syncWidgetAppearance();
+  if (typeof adapter.observeWidgetAppearanceChange === "function") {
+    try {
+      const release = adapter.observeWidgetAppearanceChange(scheduleWidgetAppearanceSync);
+      if (typeof release === "function") cardReleases.push(release);
+    } catch (_) {}
+  }
   ownListen(doc, "keydown", (event) => {
     if (event?.key !== "Escape") return;
     clearPreview();
@@ -2175,6 +2231,7 @@ function ensureFlowCard(target) {
     }
   }
   updateFlowVisibility();
+  try { flowCard?.syncAppearance?.(); } catch (_) {}
   return true;
 }
 
@@ -2377,6 +2434,7 @@ return fullCleanup;
     effectiveBackground,
     applyContrastSafety,
     restoreBadgeText,
+    copyWidgetAppearance,
   });
 })(window);
 
@@ -6141,6 +6199,38 @@ __zentralShim.register = function (def) {
                 const release = lifecycle.preference(pref, callback);
                 if (typeof release === "function") releases.push(release);
                 continue;
+              }
+              const observer = {
+                observe(_subject, _topic, data) {
+                  if (!data || data === pref) callback();
+                },
+              };
+              try {
+                Services.prefs.addObserver(pref, observer);
+                releases.push(() => Services.prefs.removeObserver(pref, observer));
+              } catch (_) {}
+            }
+            let active = true;
+            return () => {
+              if (!active) return;
+              active = false;
+              for (const release of releases.splice(0).reverse()) {
+                try { release(); } catch (_) {}
+              }
+            };
+          },
+          observeWidgetAppearanceChange: (callback) => {
+            const releases = [];
+            for (const pref of [
+              "zen.workspace.zentral.widgets.appearance.background",
+              "zen.workspace.zentral.widgets.appearance.text",
+            ]) {
+              if (typeof lifecycle?.preference === "function") {
+                try {
+                  const release = lifecycle.preference(pref, callback);
+                  if (typeof release === "function") releases.push(release);
+                  continue;
+                } catch (_) {}
               }
               const observer = {
                 observe(_subject, _topic, data) {
