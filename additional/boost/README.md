@@ -405,5 +405,5 @@ the old user pref is retained.
 
 `ZentralBoost.standalone.uc.js`, `theme.json`, `preferences.json` and `standalone.lock.json` are **generated** by
 `node tools/build-standalone.cjs` from `ZentralBoost.uc.js`, `ZentralBoostWidget.js`, `ZentralBoostWidget.css` and
-`standalone.json`; edit the sources and rebuild, never the generated files. Keep version 3.4.1 with `--keep-version`
+`standalone.json`; edit the sources and rebuild, never the generated files. Keep version 3.4.2 with `--keep-version`
 on this branch.

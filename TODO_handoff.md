@@ -1470,4 +1470,8 @@ No live Zen/Sine screenshots have been supplied. Automated fake-DOM/generated-pa
 4. **Actions and feedback:** demonstrate Light, Deep, Game Mode and Restore from the tile, with toasts beside it.
 5. **Independent installs:** show Boost-only has its tile and Widgets-only has no Boost element.
 
-The old Widgets preference remains in the profile after migration; this code deliberately does not delete user data. No live memory/performance result is claimed. The source also remains staged/uncommitted in this checkout: the visible branch HEAD is the grafted base `314154728ee6c297ccc57e02915d5950d49f41da`, so earlier W1–W4 commit hashes recorded in historical handoff text are not visible commits in this checkout.
+The old Widgets preference remains in the profile after migration; this code deliberately does not delete user data. No live memory/performance result is claimed. The prior W7 note about staged/uncommitted files and the grafted base is a historical snapshot; this follow-up is based on branch commit `6d7ec76`.
+
+## Boost-widget follow-up 5 — C1 version bump (3.4.2, 2026-11-21)
+
+The W1–W7 validation above remains a historical record of version 3.4.1. C1 raises `theme.json`, `UPSTREAM.json`, the loader and settings badge, every standalone module, generated standalone bundle/lock and current version-citing guides to **3.4.2** with `node tools/sync-version.cjs --set 3.4.2` and the required full build chain. The Notes next-session handoff now records the current version and says not to bump again without owner authorization. Sine can now detect this release as newer than 3.4.1.

@@ -107,11 +107,12 @@ try {
   });
 
   test("8. version and release-loop constraints remain pinned", () => {
-    assert.equal(require("../theme.json").version, "3.4.1");
-    assert.match(flatTodo, /Keep the project version at 3\.4\.1 until the owner explicitly says otherwise/);
-    assert.match(flatTodo, /Keep the version at 3\.4\.1; the explicit `tools\/sync-version\.cjs --set 3\.4\.1` bump is already applied/);
-    assert.match(flatTodo, /Do not run plain `--bump` or a second version change/);
-    assert.match(flatTodo, /No `--bump` \/ `sync-version`/);
+    assert.equal(require("../theme.json").version, "3.4.2");
+    assert.match(flatTodo, /Keep the project version at 3\.4\.2 unless the owner explicitly authorizes another change/);
+    assert.match(flatTodo, /FOLLOW-UP 5 \(C1\) now authorizes 3\.4\.2 so Sine can deliver the Boost\/Widgets split/);
+    assert.match(flatTodo, /Version 3\.4\.2 is the current FOLLOW-UP 5 \(C1\) update/);
+    assert.match(flatTodo, /never `--bump` or change it again without owner authorization/);
+    assert.match(flatTodo, /sync-version\.cjs --check` should report 3\.4\.2/);
   });
 
   console.log(`OW-123..OW-132 backlog specification tests passed (${passed})`);

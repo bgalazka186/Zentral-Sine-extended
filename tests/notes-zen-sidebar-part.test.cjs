@@ -93,7 +93,7 @@ test("createZenSidebar binds host helpers and configuration without changing sig
 test("Notes keeps one build/loader entry and embeds the sidebar part exactly once", () => {
   assert.equal(MANIFEST.entry, "ZentralNotes.uc.js");
   assert.equal(MANIFEST.output, "ZentralNotes.standalone.uc.js");
-  assert.equal(MANIFEST.version, "3.4.1");
+  assert.equal(MANIFEST.version, "3.4.2");
   assert.deepEqual(Object.keys(THEME.scripts), [MANIFEST.output], "one Sine script for the one entry");
   const rows = [...CATALOG.matchAll(/file:\s*"additional\/notes\/ZentralNotes\.uc\.js"/g)];
   assert.equal(rows.length, 1, "the full pack catalog has one Notes entry");

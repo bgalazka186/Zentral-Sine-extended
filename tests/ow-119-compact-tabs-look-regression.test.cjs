@@ -18,17 +18,28 @@ const REPO = path.resolve(__dirname, "..");
 const read = (rel) => fs.readFileSync(path.join(REPO, rel), "utf8");
 const DENSITY = "additional/tabs/ZentralTabDensity.css";
 const NOTES_CSS = "additional/notes/ZentralNotes.css";
-// Byte-for-byte snapshot of the compact-tabs feature immediately BEFORE the rejected
-// 04be3bae patch. The generated standalone bundle hash was refreshed for the explicit
-// 3.4.1 version bump only; the compact-tabs source and density CSS remain unchanged.
-// A legitimate future compact-tabs change must update this guard on purpose.
+// Content snapshot of the compact-tabs feature immediately BEFORE the rejected
+// 04be3bae patch. The three generated standalone version markers are normalized so
+// repo-wide Sine update bumps do not look like compact-tabs code changes. Any other
+// compact-tabs change must update this guard on purpose.
 const COMPACT_SNAPSHOT = {
   "additional/tabs/ZentralTabDensity.css": "5b5fb92e063fe783e150427ff03e0e0cdf5e763a60be8a571be38327d2904092",
   "additional/tabs/compact-hover/ZentralCompactHover.uc.js": "18c4950fb8ba45d318c1b9d71fad79f580059942d86ae36128a3cc192dc4c089",
   "additional/tabs/compact-hover/ZentralCompactHover.standalone.uc.js": "c48c14d003ea693154b9dd0ad7e4b13aaeeb98fd945e6aa9987dea5555d83eda",
 };
 
-const sha256 = (rel) => crypto.createHash("sha256").update(read(rel)).digest("hex");
+const sha256 = (rel) => {
+  let source = read(rel);
+  if (rel === "additional/tabs/compact-hover/ZentralCompactHover.standalone.uc.js") {
+    source = source
+      .replace(/^\/\/ @version \d+\.\d+\.\d+$/m, "// @version 3.4.1")
+      .replace(/(Placeholders replaced by the build: )(\d+\.\d+\.\d+)/,
+        (_match, prefix) => prefix + "3.4.1")
+      .replace(/(const __ZENTRAL_STANDALONE_VERSION__ = ")(\d+\.\d+\.\d+)(";)/,
+        (_match, prefix, _version, suffix) => prefix + "3.4.1" + suffix);
+  }
+  return crypto.createHash("sha256").update(source).digest("hex");
+};
 function runtimeScripts(dir = REPO, found = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     if (entry.name.startsWith(".") || ["node_modules", "tests", "tools"].includes(entry.name)) continue;
