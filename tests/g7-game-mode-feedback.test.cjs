@@ -136,7 +136,7 @@ test("the shared card previews before Game Mode switches on and listens to Boost
   await tick(20);
   assert.equal(h.calls.setGameMode, 1, "the action switches through the Boost API");
   assert.ok(h.calls.previewGameMode >= 2, "the dry run is read again before ON");
-  assert.equal(h.card().querySelector(".zbw-toast").textContent, "Game Mode: freeing memory…");
+  assert.equal(h.card().querySelector(".zbw-toast-line").textContent, "Game Mode: freeing memory…");
   assert.equal(h.calls.gameModeListeners.size, 1, "one Boost event subscription");
   h.destroy();
   assert.equal(h.calls.gameModeListeners.size, 0, "and it is released on teardown");
@@ -147,7 +147,7 @@ test("the shared card shows the final report and OFF Restore action", async () =
   assert.equal(h.action("restore").getAttribute("aria-label"), "Restore (1 apps, 2 tabs)");
   assert.equal(h.action("restore").disabled, false);
   h.emitGameModeEvent({ action: "on-settle", state: FEEDBACK_STATE });
-  assert.equal(h.card().querySelector(".zbw-toast").textContent, EN_FEEDBACK);
+  assert.equal(h.card().querySelector(".zbw-toast-line").textContent, EN_FEEDBACK);
   h.emitGameModeEvent({ action: "off", state: { snapshot: SNAPSHOT } });
   assert.equal(h.card().querySelector(".zbw-toast-line").textContent, EN_OFF);
   const action = h.card().querySelector(".zbw-toast-action");
@@ -166,7 +166,7 @@ test("the Boost-owned Polish fallback produces the same preview, final report an
   h.fire(h.action("game-mode"), "mouseenter");
   assert.equal(h.action("game-mode").getAttribute("data-zbw-preview"), PL_PREVIEW);
   h.emitGameModeEvent({ action: "on-settle", state: FEEDBACK_STATE });
-  assert.equal(h.card().querySelector(".zbw-toast").textContent, PL_FEEDBACK);
+  assert.equal(h.card().querySelector(".zbw-toast-line").textContent, PL_FEEDBACK);
   h.emitGameModeEvent({ action: "off", state: { snapshot: SNAPSHOT } });
   assert.equal(h.card().querySelector(".zbw-toast-line").textContent, PL_OFF);
   assert.equal(h.card().querySelector(".zbw-toast-action").textContent, "Przywróć");

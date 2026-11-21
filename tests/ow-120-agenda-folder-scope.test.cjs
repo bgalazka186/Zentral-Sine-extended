@@ -15,6 +15,7 @@ const { audit, format, parseRules, stripComments } = require("../tools/audit-pen
 
 const REPO = path.resolve(__dirname, "..");
 const read = (rel) => fs.readFileSync(path.join(REPO, rel), "utf8");
+const CURRENT_VERSION = JSON.parse(read("theme.json")).version;
 const NOTES_CSS = "additional/notes/ZentralNotes.css";
 const DENSITY_CSS = "additional/tabs/ZentralTabDensity.css";
 const OW116_SHA = "03648d9ba1c9411ba78698df1c615641612fa5116f81ed2d9c85c08e45276519";
@@ -129,16 +130,17 @@ test("the owner's temporary diagnostic file is not re-added after the delete com
   assert.match(read("docs/bugfix-2026-11-18.md"), /13755e4/);
 });
 
-test("generated Notes standalone reflects the OW-120 CSS; shipping version is 3.4.2", () => {
+test("generated Notes standalone reflects the OW-120 CSS and matches the main shipping version", () => {
   const theme = JSON.parse(read("additional/notes/theme.json"));
-  assert.equal(theme.version, "3.4.2");
+  assert.equal(theme.version, CURRENT_VERSION);
   assert.equal(theme.style.chrome, "ZentralNotes.css", "Sine loads the Notes CSS that now contains OW-120");
   assert.equal(Object.keys(theme.scripts)[0], "ZentralNotes.standalone.uc.js");
   const lock = JSON.parse(read("additional/notes/standalone.lock.json"));
-  assert.equal(lock.version, "3.4.2");
-  assert.notEqual(lock.hash, OLD_NOTES_LOCK_HASH, "--keep-version refreshed the CSS content hash without changing the version");
-  assert.match(read("additional/notes/ZentralNotes.standalone.uc.js"), /@version 3\.4\.2/);
-  assert.match(read("loader/Zentral.uc.js"), /3\.4\.2/);
+  assert.equal(lock.version, CURRENT_VERSION);
+  assert.notEqual(lock.hash, OLD_NOTES_LOCK_HASH, "the standalone lock hash reflects the current source content");
+  const escapedVersion = CURRENT_VERSION.split(".").join("\\.");
+  assert.match(read("additional/notes/ZentralNotes.standalone.uc.js"), new RegExp("@version " + escapedVersion));
+  assert.match(read("loader/Zentral.uc.js"), new RegExp(escapedVersion));
   assert.match(read("docs/bugfix-2026-11-18.md"), /no `--bump` and no version change/);
   assert.match(read("docs/bugfix-2026-11-18.md"), /tools\/sync-version\.cjs/);
 });

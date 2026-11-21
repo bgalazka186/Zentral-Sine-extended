@@ -1,12 +1,19 @@
-# OW-121 — Boost UX: four propositions, no added height
+# OW-121 — Boost UX: responsive, readable widget
 
-Date: 2026-11-19. Version stays **3.4.0**. Branch: `arena/26d4c40b-zentral-sine-extended`.
+Date: 2026-11-19; narrow-sidebar readability follow-up: 2026-11-21. Current repository version is **3.4.3**.
 
-The owner asked: “for bnoost feature do all 4, but dont make it any bigger in height”. The four propositions from the end of the OW-120 cycle were implemented together. No new pref, timer, listener, card row or setting was added.
+The original OW-121 request was to add the four Boost actions without growing the old compact menu. A later owner-directed
+readability pass replaces that one-row constraint at narrow widths: a 2×2 action grid and a readable value/label are
+preferred over clipping or ellipses in the 170 px sidebar. The original language semantics, action IDs, level attributes,
+click behavior, Restore details, seating, Widgets independence and Game Mode engine remain unchanged.
 
-## 1. Three clear level cards instead of a drop-down list
+## 1. Responsive, readable action grid
 
-The arrow still opens the existing inline popup in normal flow, but it is now a **single horizontal group** of four compact buttons: **Light**, **Deep**, **Game** and **Restore**. The first three carry `data-zw-boost-level="light|deep|game"` and a small card border. The old long labels remain in `aria-label`, so the visible row stays narrow. The old vertical "more actions" note and the OW-115 disabled explanation row are no longer appended.
+The existing inline popup stays in normal flow. Under 280 px the four compact buttons use a **2×2 grid** with short
+visible labels; at and above 280 px they use a one-row four-column layout. The header preserves the existing translated
+`card.title` text beside the RAM value. Action labels use the existing short EN/PL strings; action titles and accessible
+names keep the full translated descriptions and Restore counts. The old vertical "more actions" note and the OW-115
+disabled explanation row are not appended.
 
 ## 2. Deep clean also does Light clean
 
@@ -27,20 +34,32 @@ The Deep card's tooltip also folds in the OW-115 grouped skip reasons and pinned
 
 `boostResultText()` now appends ` · skipped N protected tab(s)` to the **existing** toast when a run reports grouped `skippedCounts`. The count comes from the full grouped object, never OW-115's bounded five-entry sample. A result with no skip data keeps the old short line. No new result row was added under the card.
 
-## No added height
+## Responsive layout, contrast and status
 
-`additional/widgets/ZentralWidgets.css` pins the open popup to `height: 26px`, `max-height: 26px`, `flex-direction: row`, `flex-wrap: nowrap` and `overflow: hidden`. Each button is `height: 20px`, `white-space: nowrap`, `overflow: hidden`, `text-overflow: ellipsis`, with compact padding. The popup contains exactly four buttons; the note and skipped row are gone. The closed card's DOM is unchanged. This is a static CSS/DOM guarantee, **not** a live browser measurement.
+`additional/boost/ZentralBoostWidget.css` owns the responsive card: a 2×2 narrow action grid switches to four columns at
+280 px, with no fixed 26 px row or forced text clipping. The translated card title and RAM value share the header; narrow actions use
+short translated labels, and Restore shows a compact count badge while preserving the long title/ARIA count. Toasts are
+multiline blocks with a full-width action when one is present. Game Mode ON retains its checked state and a visible marker.
+
+The localized `card.title` and value share the header. The sidebar text color and text-derived translucent surfaces and
+buttons are used throughout. Toast copy wraps in full without line clamping, and disabled action text is not dimmed. A
+pure WCAG contrast helper composites ancestor alpha backgrounds for at most 12 levels; one-shot checks run at mount,
+card paints/refreshes, workspace switches and dark-scheme changes. Below 4.5, a luminance-selected self-contained palette
+is activated by `data-zbw-contrast="forced"`. There is no polling and no root-style observer. Hidden/compact and
+`[hidden]` rules remain unchanged. Automated source/DOM checks and the shipped `docs/boost-widget-preview.html` are not
+live browser evidence.
 
 ## Validation
 
-- New `tests/ow-121-boost-ux.test.cjs`: RED on the pre-OW-121 tree, GREEN here (6 passed). It drives the real widget core, a fake sidebar DOM and a fake Gecko Boost runtime; it checks light-before-deep order, the result suffix, one-row CSS, four-button DOM, both languages, docs and generated bundles.
-- Updated `tests/widgets-boost-card.test.cjs` for the compact labels and accessible full Restore count; all existing Boost/widget/OW-89/OW-91/OW-110/OW-115/OW-118 suites stay green.
-- Exact `--keep-version` chain: `CHAIN_GREEN` — 12 standalone packages, `599 Sine preferences`, z-map `42/72/3`, `catalog checks passed`, `defaults agree`, `Standalone packages are up to date`. Generated Boost/Widgets standalone scripts and locks were rebuilt by `tools/build-standalone.cjs`, never hand-edited.
-- Docs-inclusive full suite: `282/282 passed; 0 failed` (`325.2 s` combined runtime / `120 s` wall), `0 TODO failing: none`, `DOCS_INCLUSIVE_SUITE_EXIT=0`. `git diff --check` clean.
-- No `--bump` or version change; `tools/sync-version.cjs` is only the exact chain's no-op 3.4.0 check. No ZIP or `.git` archive.
+- Historical OW-121 validation and suite totals remain above as a snapshot; the current responsive restyle is covered by `tests/boost-widget-look.test.cjs` (9/9), `tests/ow-121-boost-ux.test.cjs` (5/5), `tests/boost-standalone-widget.test.cjs` (15/15) and `tests/g7-game-mode-feedback.test.cjs` (9/9).
+- The standalone source rebuild/check (`node tools/build-standalone.cjs --keep-version && node tools/build-standalone.cjs --check`) passes. The exact release/build/test chain for this follow-up is recorded in the current handoff; no generated bundle or lock is hand-edited.
 
 *Historical snapshot:* the `599 Sine preferences` and `282/282` figures above belong to the OW-121 cycle. Later `OW-127` added two prefs (`601`) and the post-batch regression sweep raised the docs-inclusive suite to `294/294`; see `docs/bugfix-2026-11-18.md`.
 
-## OWNER GATE
+## OWNER GATES — OPEN
 
-No live Zen/Sine runtime or screenshot is available here. OWNER GATE: open the Boost popup in the live sidebar and confirm the four cards fit on one row, the widget's height is unchanged or smaller, tooltips are readable in en/pl, Deep visibly reports the light clean + skipped tabs, and ordinary light/deep/Game Mode/Restore actions still behave. Real RAM figures, frame rate and live visual height are not claimed as measured here.
+No live Zen/Sine runtime or screenshot is available here. Inspect `docs/boost-widget-preview.html` at 170 px in its light,
+dark, owner-like and deliberately low-contrast themes, confirming value/label, all four actions, Restore badge, Game Mode
+ON and multiline toast are readable and unclipped. Then verify the real 170 px sidebar in light and dark, including the
+value, four buttons, badge and Game Mode toast. Historical W1–W7 gates also remain open until their owner evidence arrives.
+Real RAM figures, frame rate or live visual results are not claimed as measured here.

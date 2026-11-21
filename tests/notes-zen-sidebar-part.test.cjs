@@ -15,6 +15,7 @@ const PART_PATH = "additional/notes/zen/ZentralNotesZenSidebar.js";
 const MAIN = read("additional/notes/ZentralNotes.uc.js");
 const MANIFEST = JSON.parse(read("additional/notes/standalone.json"));
 const THEME = JSON.parse(read("additional/notes/theme.json"));
+const CURRENT_VERSION = JSON.parse(read("theme.json")).version;
 const CATALOG = read("loader/ZentralCatalog.js");
 const C = require("../additional/notes/calendar/ZentralNotesCalendar.js");
 const UI = require("../additional/notes/calendar/ZentralNotesCalendarUI.js");
@@ -93,7 +94,8 @@ test("createZenSidebar binds host helpers and configuration without changing sig
 test("Notes keeps one build/loader entry and embeds the sidebar part exactly once", () => {
   assert.equal(MANIFEST.entry, "ZentralNotes.uc.js");
   assert.equal(MANIFEST.output, "ZentralNotes.standalone.uc.js");
-  assert.equal(MANIFEST.version, "3.4.2");
+  assert.equal(MANIFEST.version, CURRENT_VERSION);
+  assert.equal(THEME.version, CURRENT_VERSION);
   assert.deepEqual(Object.keys(THEME.scripts), [MANIFEST.output], "one Sine script for the one entry");
   const rows = [...CATALOG.matchAll(/file:\s*"additional\/notes\/ZentralNotes\.uc\.js"/g)];
   assert.equal(rows.length, 1, "the full pack catalog has one Notes entry");

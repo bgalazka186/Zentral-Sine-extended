@@ -14,6 +14,7 @@ const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
 const UI_PATH = "additional/notes/calendar/ZentralNotesCalendarUI.js";
 const MAIN = read("additional/notes/ZentralNotes.uc.js");
 const MANIFEST = JSON.parse(read("additional/notes/standalone.json"));
+const CURRENT_VERSION = JSON.parse(read("theme.json")).version;
 const C = require("../additional/notes/calendar/ZentralNotesCalendar.js");
 const UI = require("../additional/notes/calendar/ZentralNotesCalendarUI.js");
 const dom = require("./helpers/fake-dom.cjs")();
@@ -46,7 +47,7 @@ test("the standalone manifest embeds the UI part right after the calendar core",
   const core = include.indexOf("calendar/ZentralNotesCalendar.js");
   const ui = include.indexOf("calendar/ZentralNotesCalendarUI.js");
   assert.ok(core >= 0 && ui > core, "the core loads first, then the UI part");
-  assert.equal(MANIFEST.version, "3.4.2", "explicit 3.4.2 release");
+  assert.equal(MANIFEST.version, CURRENT_VERSION, "Notes follows the main release version");
 });
 
 test("the monolith loads the part and delegates each extracted decision to it", () => {

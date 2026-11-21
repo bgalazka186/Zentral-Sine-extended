@@ -1,6 +1,6 @@
 /* Boost-owned sidebar widget. The standalone package and full-pack CSS catalog
- * load this same stylesheet. OW-121's one-row rule keeps the value, label and all
- * four actions on a 26 px row; fixed positioning below is only the no-target fallback anchor. */
+ * load this same stylesheet. Narrow sidebars use a readable two-row, 2x2 action
+ * grid; the wide fallback returns to one compact row. */
 #zentral-boost-widget-anchor {
   position: fixed;
   width: 1px;
@@ -15,16 +15,22 @@
 #zentral-boost-widget,
 .zbw-card {
   box-sizing: border-box;
+  container-type: inline-size;
+  container-name: zbw;
   display: flex;
+  flex: 0 0 auto;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
+  width: calc(100% - 8px);
+  min-width: 0;
   max-width: 360px;
-  padding: 2px 4px;
+  margin: 2px 4px;
+  padding: 4px 5px;
   font: 11px/1.2 system-ui, sans-serif;
-  color: var(--zen-primary-color, #eee);
-  background: var(--zen-colors-secondary, rgba(0, 0, 0, .72));
-  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
-  border-radius: 6px;
+  color: var(--zen-colors-text, inherit);
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+  border-radius: 10px;
 }
 
 #zentral-boost-widget[hidden],
@@ -56,22 +62,31 @@
   display: none !important;
 }
 
-.zbw-row,
-.zbw-popup {
-  display: flex !important;
-  flex-direction: row !important;
-  flex-wrap: nowrap !important;
-  align-items: center !important;
-  gap: 4px !important;
-  width: 100%;
-  max-height: 26px !important;
-  overflow: hidden !important;
+.zbw-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  min-width: 0;
+}
+
+.zbw-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+  line-height: 1.15;
 }
 
 .zbw-value {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 14px;
   font-weight: 700;
-  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .zbw-value[data-zbw-level="low"] {
@@ -79,64 +94,186 @@
 }
 
 .zbw-value[data-zbw-level="muted"] {
-  opacity: .6;
+  color: color-mix(in srgb, currentColor 80%, transparent);
 }
 
 .zbw-label {
   flex: 0 1 auto;
-  opacity: .78;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  overflow: hidden;
+  min-width: 0;
+  color: color-mix(in srgb, currentColor 80%, transparent);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+  text-align: right;
+  white-space: normal;
 }
 
 .zbw-popup {
-  flex: 1 1 auto;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  min-width: 0;
 }
 
 .zbw-action,
 .zbw-toast-action {
+  appearance: none !important;
+  -moz-appearance: none !important;
   box-sizing: border-box;
-  flex: 0 0 auto;
-  height: 20px !important;
-  min-width: 38px;
-  max-width: 76px;
-  padding: 0 5px;
-  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
-  border-radius: 4px;
-  background: transparent;
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  min-width: 24px !important;
+  min-height: 24px !important;
+  height: 26px !important;
+  margin: 0 !important;
+  padding: 0 4px !important;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, currentColor 8%, transparent);
   color: inherit;
-  font: inherit;
-  white-space: nowrap !important;
-  text-overflow: ellipsis !important;
-  overflow: hidden !important;
+  box-shadow: none !important;
+  font: 11px/1 system-ui, sans-serif !important;
+  font-weight: 500 !important;
+  text-align: center;
+  text-shadow: none !important;
+  white-space: nowrap;
   cursor: pointer;
 }
 
+.zbw-action:hover:not([disabled]),
+.zbw-toast-action:hover {
+  background: color-mix(in srgb, currentColor 16%, transparent);
+  color: inherit;
+}
+
+.zbw-action:active:not([disabled]),
+.zbw-toast-action:active {
+  background: color-mix(in srgb, currentColor 22%, transparent);
+  color: inherit;
+}
+
+.zbw-action:focus-visible,
+.zbw-toast-action:focus-visible {
+  outline: 2px solid color-mix(in srgb, currentColor 75%, transparent);
+  outline-offset: 2px;
+}
+
+.zbw-action[aria-checked="true"] {
+  background: color-mix(in srgb, currentColor 22%, transparent);
+  border-color: color-mix(in srgb, currentColor 45%, transparent);
+  color: inherit;
+}
+
 .zbw-action[disabled] {
-  opacity: .42;
   cursor: default;
+}
+
+.zbw-action-count {
+  flex: 0 0 auto;
+  padding: 1px 2px;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: 5px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  color: inherit;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
 }
 
 .zbw-toast {
   box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
   max-width: 100%;
-  padding: 0 2px;
-  opacity: .86;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  overflow: hidden;
-
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 6px;
+  min-width: 0;
+  padding: 0 1px;
+  color: color-mix(in srgb, currentColor 80%, transparent);
 }
 
 .zbw-toast-line {
-  flex: 1 1 auto;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  overflow: hidden;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: inherit;
+  line-height: 1.3;
+  white-space: normal;
+}
+
+.zbw-toast-action {
+  width: 100%;
+  color: inherit;
+}
+
+@container zbw (max-width: 130px) {
+  .zbw-action {
+    flex-wrap: wrap;
+    gap: 0;
+    padding: 0 2px !important;
+    font-size: 10px !important;
+    white-space: normal;
+  }
+
+  .zbw-action-count {
+    padding: 0 1px;
+    font-size: 7px;
+  }
+}
+
+#zentral-boost-widget[data-zbw-contrast="forced"][data-zbw-contrast-surface="dark"],
+.zbw-card[data-zbw-contrast="forced"][data-zbw-contrast-surface="dark"] {
+  background: #1e1f22;
+  border-color: color-mix(in srgb, currentColor 32%, transparent);
+  color: #f3f3f3;
+}
+
+#zentral-boost-widget[data-zbw-contrast="forced"][data-zbw-contrast-surface="light"],
+.zbw-card[data-zbw-contrast="forced"][data-zbw-contrast-surface="light"] {
+  background: #f3f3f4;
+  border-color: color-mix(in srgb, currentColor 32%, transparent);
+  color: #1b1b1d;
+}
+
+#zentral-boost-widget[data-zbw-contrast="forced"] .zbw-value[data-zbw-level="low"],
+.zbw-card[data-zbw-contrast="forced"] .zbw-value[data-zbw-level="low"] {
+  color: inherit;
+}
+
+@container zbw (min-width: 280px) {
+  .zbw-row {
+    grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+    align-items: center;
+    gap: 6px;
+  }
+
+  .zbw-header {
+    gap: 4px;
+  }
+
+  .zbw-value {
+    font-size: 13px;
+  }
+
+  .zbw-label {
+    font-size: 9px;
+  }
+
+  .zbw-popup {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 3px;
+  }
+
+  .zbw-action,
+  .zbw-toast-action {
+    gap: 1px;
+    padding: 0 !important;
+    font-size: 9px !important;
+  }
+
+  .zbw-action-count {
+    padding: 0 1px;
+    font-size: 7px;
+  }
 }

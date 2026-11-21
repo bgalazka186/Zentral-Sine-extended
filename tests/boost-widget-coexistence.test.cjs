@@ -338,7 +338,7 @@ function ownedCssSelectors(css) {
   return [...source.matchAll(/([^{}]+)\{/g)]
     .map((match) => match[1].trim())
     .flatMap((group) => group.split(",").map((selector) => selector.trim()))
-    .filter(Boolean);
+    .filter((selector) => selector && !selector.startsWith("@"));
 }
 
 test("1. Full pack: enabled Widgets tray and Boost own one card in deterministic sidebar order", () => {

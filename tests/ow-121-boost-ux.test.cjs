@@ -1,8 +1,9 @@
 "use strict";
-/* OW-121 — Boost UX: all four owner propositions, with no extra widget height.
+/* OW-121 — Boost UX: responsive narrow-sidebar readability follow-up.
  *
- * RED on the pre-OW-121 tree; GREEN here. Static checks are screenshot-free and a fake sidebar / fake Gecko
- * drives the Boost-owned pure rules and source. Live popup height/appearance remains an OWNER GATE.
+ * Historical OW-121 kept the compact row; the visual follow-up replaces that constraint with readable 2×2 actions.
+ * Static checks are screenshot-free and a fake sidebar / fake Gecko drives the Boost-owned source. Live appearance
+ * remains an OWNER GATE.
  */
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -11,6 +12,7 @@ const vm = require("node:vm");
 
 const REPO = path.resolve(__dirname, "..");
 const read = (rel) => fs.readFileSync(path.join(REPO, rel), "utf8");
+const CURRENT_VERSION = JSON.parse(read("theme.json")).version;
 const BOOST_WIDGET_SRC = read("additional/boost/ZentralBoostWidget.js");
 const BOOST_WIDGET_CSS = read("additional/boost/ZentralBoostWidget.css");
 const BOOST_SRC = read("additional/boost/ZentralBoost.uc.js");
@@ -114,26 +116,39 @@ test("Boost-owned result text adds skipped protected tabs without inventing anot
   assert.equal(c.resultText({ freedMB: 10 }, "en"), "Freed 10 MB", "no skipped data keeps the short line");
 });
 
-/* ---------------- 4. no extra height ---------------- */
+/* ---------------- 4. readable narrow grid + compact wide variant ---------------- */
 
-test("the Boost-owned stylesheet and renderer keep one 26 px row with no visible skipped row", () => {
+test("the Boost-owned card uses the readable grid, short actions, toast block and stateful Game Mode", () => {
   const rowBlock = BOOST_WIDGET_CSS.slice(
-    BOOST_WIDGET_CSS.indexOf(".zbw-row,"), BOOST_WIDGET_CSS.indexOf(".zbw-value {"));
-  assert.match(rowBlock, /flex-direction:\s*row !important/);
-  assert.match(rowBlock, /flex-wrap:\s*nowrap !important/);
-  assert.match(rowBlock, /max-height:\s*26px !important/);
-  assert.match(rowBlock, /overflow:\s*hidden !important/);
+    BOOST_WIDGET_CSS.indexOf(".zbw-row {"), BOOST_WIDGET_CSS.indexOf(".zbw-header {"));
+  assert.match(rowBlock, /display:\s*grid/);
+  assert.match(BOOST_WIDGET_CSS, /grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+  assert.match(BOOST_WIDGET_CSS, /@container\s+zbw\s*\(min-width:\s*280px\)/);
+  assert.match(BOOST_WIDGET_CSS, /grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)/);
+  assert.doesNotMatch(BOOST_WIDGET_CSS, /max-height:\s*26px|overflow:\s*hidden\s*!important/);
   const actionBlock = BOOST_WIDGET_CSS.slice(
-    BOOST_WIDGET_CSS.indexOf(".zbw-action,"), BOOST_WIDGET_CSS.indexOf(".zbw-action[disabled]"));
-  assert.match(actionBlock, /height:\s*20px !important/);
-  assert.match(actionBlock, /white-space:\s*nowrap !important/);
-  assert.match(actionBlock, /text-overflow:\s*ellipsis !important/);
-  assert.match(actionBlock, /overflow:\s*hidden !important/);
+    BOOST_WIDGET_CSS.indexOf(".zbw-action,"), BOOST_WIDGET_CSS.indexOf(".zbw-action:hover"));
+  assert.match(actionBlock, /appearance:\s*none/);
+  assert.match(actionBlock, /height:\s*26px !important/);
+  assert.match(actionBlock, /min-width:\s*24px !important/);
+  assert.match(actionBlock, /text-shadow:\s*none !important/);
+  assert.match(actionBlock, /padding:\s*0 4px !important/);
+  assert.doesNotMatch(actionBlock, /max-width:\s*\d+px/);
+  assert.match(BOOST_WIDGET_CSS, /\.zbw-toast-line\s*\{[^}]*white-space:\s*normal/);
+  assert.match(BOOST_WIDGET_CSS, /\.zbw-toast-line\s*\{[^}]*overflow-wrap:\s*anywhere/);
+  assert.doesNotMatch(BOOST_WIDGET_CSS, /-webkit-line-clamp|\.zbw-toast-line\s*\{[^}]*overflow:\s*hidden/);
+  assert.doesNotMatch(BOOST_WIDGET_CSS, /\.zbw-label\s*\{[^}]*text-overflow:\s*ellipsis/);
+  assert.match(BOOST_WIDGET_CSS, /\.zbw-toast-action\s*\{[^}]*width:\s*100%/);
   const paint = BOOST_WIDGET_SRC.slice(BOOST_WIDGET_SRC.indexOf("function paintMenu()"),
     BOOST_WIDGET_SRC.indexOf("function handleGameModeEvent"));
-  assert.doesNotMatch(paint, /createElement\("div"\)/, "no extra row is appended");
-  assert.match(paint, /item.id === "deep-skipped"/, "skip details go into the Deep tooltip");
+  assert.doesNotMatch(paint, /createElement\("div"\)/, "skip details do not add another row");
+  assert.match(paint, /item.id === "deep-skipped"/, "skip details remain Deep tooltip data");
   assert.match(paint, /popup.appendChild\(button\)/, "the four actions remain buttons");
+  assert.match(paint, /restoreBadgeText\(restorableCount\(snapshot\)\)/);
+  assert.match(paint, /aria-checked/);
+  assert.match(paint, /gameModeOn \? "● "/, "Game Mode ON has a visible non-color marker");
+  assert.match(BOOST_WIDGET_SRC, /labelEl\.textContent = text\("card\.title"\)/, "visible card title stays translated");
+  assert.doesNotMatch(BOOST_WIDGET_CSS, /\.zbw-action\[disabled\][^{]*\{[^}]*opacity:/, "disabled action text is not dimmed");
 });
 
 /* ---------------- docs / generated files / version ---------------- */
@@ -145,7 +160,7 @@ test("the Boost plan, perf report, README and handoff record OW-121", () => {
   assert.match(read(".gitignore"), /!docs\/ow-121-boost-ux\.md/);
   assert.match(read("additional/boost/ZentralBoost.standalone.uc.js"), /lightClean/);
   assert.match(read("additional/boost/ZentralBoost.standalone.uc.js"), /widgetMenu/);
-  assert.match(read("loader/Zentral.uc.js"), /3\.4\.2/);
+  assert.match(read("loader/Zentral.uc.js"), new RegExp(CURRENT_VERSION.split(".").join("\\.")));
   assert.match(read("docs/bugfix-2026-11-18.md"), /no `--bump` and no version change/);
   assert.match(read("docs/bugfix-2026-11-18.md"), /tools\/sync-version\.cjs/);
 });

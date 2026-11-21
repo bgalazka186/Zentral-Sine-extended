@@ -14,6 +14,7 @@ const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
 const PART_PATH = "additional/notes/parser/ZentralNotesParserGraph.js";
 const MAIN = read("additional/notes/ZentralNotes.uc.js");
 const MANIFEST = JSON.parse(read("additional/notes/standalone.json"));
+const CURRENT_VERSION = JSON.parse(read("theme.json")).version;
 const C = require("../additional/notes/calendar/ZentralNotesCalendar.js");
 const UI = require("../additional/notes/calendar/ZentralNotesCalendarUI.js");
 const PARSER = require("../additional/notes/parser/ZentralNotesParserGraph.js");
@@ -69,7 +70,7 @@ test("the standalone manifest embeds the parser part after the calendar UI part"
   const ui = include.indexOf("calendar/ZentralNotesCalendarUI.js");
   const parser = include.indexOf("parser/ZentralNotesParserGraph.js");
   assert.ok(ui >= 0 && parser > ui, "the parser part loads after calendar UI");
-  assert.equal(MANIFEST.version, "3.4.2");
+  assert.equal(MANIFEST.version, CURRENT_VERSION);
 });
 
 test("the monolith loads the part and every extracted name delegates to it", () => {

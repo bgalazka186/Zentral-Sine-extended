@@ -268,7 +268,7 @@ test("standalone keeps the existing hover fallback when the shared safe selector
   assert.equal(h.mutationObservers.size, 0);
 });
 
-test("both loaders point at one Boost-owned source and the four-action one-row stylesheet", () => {
+test("both loaders point at one Boost-owned source and the responsive two-row action grid", () => {
   assert.deepEqual(MANIFEST.include, ["ZentralBoostWidget.js"]);
   assert.equal(MANIFEST.extras, undefined);
   assert.equal(MANIFEST.loader, "__zentralBoostLoader");
@@ -278,8 +278,10 @@ test("both loaders point at one Boost-owned source and the four-action one-row s
   assert.match(CATALOG, /extraSources:\s*\["loader\/ZentralSidebarMount\.js",\s*"additional\/boost\/ZentralBoostWidget\.js"\]/);
   assert.match(CATALOG, /id:\s*"widgets"[\s\S]{0,130}extraSources:\s*\["loader\/ZentralSidebarMount\.js"\]/);
   assert.match(CATALOG, /id:\s*"BoostWidget"[\s\S]{0,140}file:\s*"additional\/boost\/ZentralBoostWidget\.css"[\s\S]{0,80}owners:\s*\["boost"\]/);
-  assert.match(CSS, /max-height:\s*26px\s*!important/);
-  assert.match(CSS, /flex-direction:\s*row\s*!important/);
+  assert.match(CSS, /container-type:\s*inline-size/);
+  assert.match(CSS, /grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+  assert.match(CSS, /@container\s+zbw\s*\(min-width:\s*280px\)/);
+  assert.doesNotMatch(CSS, /max-height:\s*26px|overflow:\s*hidden\s*!important/);
   assert.match(CSS, /\.zbw-action/);
   assert.doesNotMatch(CSS, /zbsw-|zentral-boost-standalone-card/);
   assert.match(WIDGET_SRC, /function mountBoostWidget/);
@@ -369,12 +371,12 @@ test("the tile forwards existing limiter notices and releases that subscription 
   const h = await boot();
   assert.equal(h.calls.limiterSubscribe, 1);
   h.emitLimiterEvent({ action: "notify", totalMB: 5120, limitMB: 4096 });
-  assert.equal(h.card().querySelector(".zbw-toast").textContent,
+  assert.equal(h.card().querySelector(".zbw-toast-line").textContent,
     "5120 MB in use, above your 4096 MB limit. Open Boost to free memory.");
   h.emitLimiterEvent({ action: "hard-done", totalMB: 4000, unloaded: { tabs: 2, panels: 0 } });
-  assert.equal(h.card().querySelector(".zbw-toast").textContent, "Freed memory down to 4000 MB");
+  assert.equal(h.card().querySelector(".zbw-toast-line").textContent, "Freed memory down to 4000 MB");
   h.emitLimiterEvent({ action: "nothing-eligible" });
-  assert.equal(h.card().querySelector(".zbw-toast").textContent,
+  assert.equal(h.card().querySelector(".zbw-toast-line").textContent,
     "Memory is high, but nothing else may be unloaded");
   h.destroy();
   assert.equal(h.calls.limiterSubscribe, h.calls.limiterUnsubscribe);
@@ -385,26 +387,38 @@ test("the tile forwards existing limiter notices and releases that subscription 
 test("English and Polish actions use the Boost-owned dictionary", async () => {
   const en = await boot({ language: "en" });
   assert.equal(en.doc.getElementById("zentral-boost-widget").getAttribute("aria-label"), "512 MB \u00b7 Memory Boost");
+  assert.equal(en.doc.getElementById("zentral-boost-widget").querySelector(".zbw-label").textContent, "Memory Boost");
   assert.deepEqual(en.actions().map((el) => el.textContent), ["Light", "Deep", "Game", "Restore"]);
   en.destroy();
   const pl = await boot({ language: "pl-PL" });
   assert.match(pl.doc.getElementById("zentral-boost-widget").getAttribute("aria-label"), /Pamięć Boost/);
+  assert.equal(pl.doc.getElementById("zentral-boost-widget").querySelector(".zbw-label").textContent, "Pamięć Boost");
   assert.deepEqual(pl.actions().map((el) => el.textContent), ["Lekko", "Głęboko", "Gra", "Przywróć"]);
   pl.destroy();
 });
 
-test("OW-121 keeps one 26 px action row, the newer level/Restore copy, skipped feedback and snapshot counts", async () => {
+test("OW-121 keeps the readable action grid, short Restore badge, tooltips and stateful Game Mode", async () => {
   const h = await boot();
   const tile = h.doc.getElementById("zentral-boost-widget");
   const row = tile.querySelector(".zbw-row");
   assert.equal(row.querySelectorAll("[data-zbw-action]").length, 4);
-  assert.match(CSS, /\.zbw-row[\s\S]{0,240}max-height:\s*26px\s*!important/);
-  assert.match(CSS, /\.zbw-action[\s\S]{0,500}height:\s*20px\s*!important/);
+  assert.ok(tile.querySelector(".zbw-header"));
+  assert.equal(tile.querySelector(".zbw-label").textContent, "Memory Boost", "the visible label keeps card.title translation semantics");
+  assert.match(CSS, /grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+  assert.doesNotMatch(CSS, /max-height:\s*26px|overflow:\s*hidden\s*!important/);
+  assert.match(CSS, /\.zbw-action[\s\S]{0,500}height:\s*26px\s*!important/);
   assert.match(h.action("free-light").getAttribute("title"), /Light: GC\/CC \+ memory minimize\. No tabs touched\./);
   assert.match(h.action("free-deep").getAttribute("title"), /Restore available\./);
   assert.match(h.action("game-mode").getAttribute("title"), /pauses repeating features/);
+  assert.match(h.action("restore").getAttribute("title"), /Restore \(1 apps, 2 tabs\)/);
   assert.match(h.action("restore").getAttribute("title"), /panels as panels, tabs as tabs/);
   assert.equal(h.action("restore").getAttribute("aria-label"), "Restore (1 apps, 2 tabs)");
+  assert.equal(h.action("restore").textContent, "Restore", "the button label stays short");
+  assert.equal(h.action("restore").querySelector(".zbw-action-count").textContent, "3");
+  h.fire(h.action("game-mode"), "click");
+  await h.flush(0);
+  assert.equal(h.action("game-mode").getAttribute("aria-checked"), "true");
+  assert.equal(h.action("game-mode").textContent, "● Game", "ON is marked without color alone");
 
   const api = h.api();
   const items = api.widgetMenu({

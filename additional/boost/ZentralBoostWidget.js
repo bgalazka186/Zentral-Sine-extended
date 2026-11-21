@@ -11,6 +11,190 @@
 (function installBoostWidgetModule(targetWindow) {
   "use strict";
 
+  const CONTRAST_THRESHOLD = 4.5;
+  const MAX_CONTRAST_ANCESTORS = 12;
+
+  function parseCssColor(value) {
+    if (value && typeof value === "object") {
+      const r = Number(value.r), g = Number(value.g), b = Number(value.b);
+      const a = value.a == null ? 1 : Number(value.a);
+      return [r, g, b, a].every(Number.isFinite)
+        ? { r: clamp(r, 0, 255), g: clamp(g, 0, 255), b: clamp(b, 0, 255), a: clamp(a, 0, 1) }
+        : null;
+    }
+    const text = String(value || "").trim().toLowerCase();
+    if (!text) return null;
+    if (text === "transparent") return { r: 0, g: 0, b: 0, a: 0 };
+    if (text === "black") return { r: 0, g: 0, b: 0, a: 1 };
+    if (text === "white") return { r: 255, g: 255, b: 255, a: 1 };
+
+    const hex = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(text);
+    if (hex) {
+      let digits = hex[1];
+      if (digits.length <= 4) digits = [...digits].map((part) => part + part).join("");
+      const hasAlpha = digits.length === 8;
+      return {
+        r: parseInt(digits.slice(0, 2), 16),
+        g: parseInt(digits.slice(2, 4), 16),
+        b: parseInt(digits.slice(4, 6), 16),
+        a: hasAlpha ? parseInt(digits.slice(6, 8), 16) / 255 : 1,
+      };
+    }
+
+    const parseChannel = (part, max) => {
+      if (!part) return null;
+      const percent = part.endsWith("%");
+      const n = Number(percent ? part.slice(0, -1) : part);
+      return Number.isFinite(n) ? clamp(percent ? n * max / 100 : n, 0, max) : null;
+    };
+    const rgb = /^rgba?\((.*)\)$/i.exec(text);
+    if (rgb) {
+      const parts = rgb[1].replace(/\s*\/\s*/, " ").replace(/,/g, " ").trim().split(/\s+/);
+      if (parts.length < 3 || parts.length > 4) return null;
+      const channels = parts.slice(0, 3).map((part) => parseChannel(part, 255));
+      const alpha = parts[3] == null ? 1 : parseChannel(parts[3], 1);
+      if (channels.some((part) => part == null) || alpha == null) return null;
+      return { r: channels[0], g: channels[1], b: channels[2], a: alpha };
+    }
+
+    // Recent Gecko may serialize color-mix() as color(srgb ... / alpha).
+    const srgb = /^color\(srgb\s+(.+)\)$/i.exec(text);
+    if (srgb) {
+      const parts = srgb[1].replace(/\s*\/\s*/, " ").trim().split(/\s+/);
+      if (parts.length < 3 || parts.length > 4) return null;
+      const channels = parts.slice(0, 3).map((part) => parseChannel(part, 1));
+      const alpha = parts[3] == null ? 1 : parseChannel(parts[3], 1);
+      if (channels.some((part) => part == null) || alpha == null) return null;
+      return { r: channels[0] * 255, g: channels[1] * 255, b: channels[2] * 255, a: alpha };
+    }
+    return null;
+  }
+
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  function compositeColor(foreground, background) {
+    const alpha = foreground.a + background.a * (1 - foreground.a);
+    if (alpha <= 0) return { r: 0, g: 0, b: 0, a: 0 };
+    return {
+      r: (foreground.r * foreground.a + background.r * background.a * (1 - foreground.a)) / alpha,
+      g: (foreground.g * foreground.a + background.g * background.a * (1 - foreground.a)) / alpha,
+      b: (foreground.b * foreground.a + background.b * background.a * (1 - foreground.a)) / alpha,
+      a: alpha,
+    };
+  }
+
+  function linearChannel(value) {
+    const n = clamp(value / 255, 0, 1);
+    return n <= 0.04045 ? n / 12.92 : Math.pow((n + 0.055) / 1.055, 2.4);
+  }
+
+  function relativeLuminance(value) {
+    const color = parseCssColor(value);
+    if (!color) return null;
+    return 0.2126 * linearChannel(color.r) +
+      0.7152 * linearChannel(color.g) +
+      0.0722 * linearChannel(color.b);
+  }
+
+  function contrastRatio(foreground, background) {
+    const fg = parseCssColor(foreground);
+    const bg = parseCssColor(background);
+    if (!fg || !bg) return 1;
+    const opaqueBg = bg.a < 1 ? compositeColor(bg, { r: 255, g: 255, b: 255, a: 1 }) : bg;
+    const opaqueFg = fg.a < 1 ? compositeColor(fg, opaqueBg) : fg;
+    const l1 = relativeLuminance(opaqueFg);
+    const l2 = relativeLuminance(opaqueBg);
+    return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+  }
+
+  function effectiveBackground(element) {
+    if (!element) return null;
+    const view = element.ownerDocument?.defaultView || targetWindow;
+    if (typeof view?.getComputedStyle !== "function") return null;
+    let dark = false;
+    try { dark = view.matchMedia?.("(prefers-color-scheme: dark)")?.matches === true; } catch (_) {}
+    let background = dark
+      ? { r: 0, g: 0, b: 0, a: 1 }
+      : { r: 255, g: 255, b: 255, a: 1 };
+    const ancestors = [];
+    for (let node = element; node && ancestors.length < MAX_CONTRAST_ANCESTORS; node = node.parentElement)
+      ancestors.push(node);
+    for (let i = ancestors.length - 1; i >= 0; i--) {
+      try {
+        const color = parseCssColor(view.getComputedStyle(ancestors[i])?.backgroundColor);
+        if (color) background = compositeColor(color, background);
+      } catch (_) {}
+    }
+    return `rgb(${Math.round(background.r)}, ${Math.round(background.g)}, ${Math.round(background.b)})`;
+  }
+
+  function applyContrastSafety(element) {
+    if (!element || typeof element.setAttribute !== "function")
+      return { forced: false, ratio: null, surface: null, background: null };
+    const wasForced = element.getAttribute?.("data-zbw-contrast") === "forced";
+    const oldSurface = element.getAttribute?.("data-zbw-contrast-surface");
+    if (wasForced) {
+      element.removeAttribute?.("data-zbw-contrast");
+      element.removeAttribute?.("data-zbw-contrast-surface");
+    }
+
+    const view = element.ownerDocument?.defaultView || targetWindow;
+    const background = effectiveBackground(element);
+    const bgColor = parseCssColor(background);
+    if (!bgColor) {
+      if (wasForced) {
+        element.setAttribute("data-zbw-contrast", "forced");
+        if (oldSurface) element.setAttribute("data-zbw-contrast-surface", oldSurface);
+      }
+      return { forced: wasForced, ratio: null, surface: oldSurface || null, background };
+    }
+
+    // Check visible text-bearing descendants too (notably the warning-colored RAM value), so a healthy card
+    // foreground cannot mask a lower-contrast label, action or toast. This is a bounded DOM walk on paints only.
+    const targets = [element];
+    try {
+      for (const child of element.querySelectorAll?.(
+        ".zbw-value, .zbw-label, .zbw-action, .zbw-action-count, .zbw-toast-line, .zbw-toast-action") || [])
+        targets.push(child);
+    } catch (_) {}
+    let ratio = null;
+    for (const target of targets) {
+      let foreground = null;
+      try { foreground = parseCssColor(view?.getComputedStyle?.(target)?.color); } catch (_) {}
+      const targetBackground = effectiveBackground(target);
+      if (!foreground || !targetBackground) continue;
+      const current = contrastRatio(foreground, targetBackground);
+      ratio = ratio == null ? current : Math.min(ratio, current);
+    }
+    if (ratio == null) {
+      if (wasForced) {
+        element.setAttribute("data-zbw-contrast", "forced");
+        if (oldSurface) element.setAttribute("data-zbw-contrast-surface", oldSurface);
+      }
+      return { forced: wasForced, ratio: null, surface: oldSurface || null, background };
+    }
+
+    const forced = ratio < CONTRAST_THRESHOLD;
+    const surface = relativeLuminance(bgColor) < 0.5 ? "dark" : "light";
+    if (forced) {
+      element.setAttribute("data-zbw-contrast", "forced");
+      element.setAttribute("data-zbw-contrast-surface", surface);
+    } else {
+      element.removeAttribute("data-zbw-contrast");
+      element.removeAttribute("data-zbw-contrast-surface");
+    }
+    return { forced, ratio, surface: forced ? surface : null, background };
+  }
+
+  function restoreBadgeText(value) {
+    let count = 0;
+    try { count = Math.floor(Number(value)); } catch (_) { return ""; }
+    if (!Number.isFinite(count) || count < 1) return "";
+    return count > 99 ? "99+" : String(count);
+  }
+
   function mountBoostWidget(options = {}) {
     const window = options.window || targetWindow;
     const doc = options.document || window.document;
@@ -226,6 +410,8 @@ function createCard({ root, mode }) {
   root.setAttribute("aria-label", text("card.title"));
   const row = doc.createElement("div");
   row.className = "zbw-row";
+  const header = doc.createElement("div");
+  header.className = "zbw-header";
   const valueEl = doc.createElement("span");
   valueEl.className = "zbw-value";
   valueEl.textContent = "\u2014";
@@ -237,8 +423,9 @@ function createCard({ root, mode }) {
   popup.setAttribute("role", "group");
   popup.setAttribute("aria-label", "Boost levels and Restore");
   popup.hidden = false;
-  row.appendChild(valueEl);
-  row.appendChild(labelEl);
+  header.appendChild(valueEl);
+  header.appendChild(labelEl);
+  row.appendChild(header);
   row.appendChild(popup);
   root.appendChild(row);
   const toastEl = doc.createElement("div");
@@ -246,6 +433,11 @@ function createCard({ root, mode }) {
   toastEl.setAttribute("role", "status");
   toastEl.hidden = true;
   root.appendChild(toastEl);
+
+  function updateContrast() {
+    if (cardDisposed) return;
+    applyContrastSafety(root);
+  }
 
   function paintValue() {
     const api = boostApi();
@@ -261,6 +453,7 @@ function createCard({ root, mode }) {
     root.setAttribute("aria-label", parts
       ? parts.text + " \u00b7 " + text("card.title")
       : text("card.unknown"));
+    updateContrast();
   }
 
   function computePreviewLine() {
@@ -307,16 +500,27 @@ function createCard({ root, mode }) {
       button.className = "zbw-action";
       button.setAttribute("data-zbw-action", item.id);
       if (item.level) button.setAttribute("data-zbw-level", item.level);
-      button.textContent = item.shortLabel || item.label || item.id;
+      const shortLabel = item.shortLabel || item.label || item.id;
+      const gameModeOn = item.id === "game-mode" && item.checked === true;
+      button.textContent = (gameModeOn ? "● " : "") + shortLabel;
       button.setAttribute("aria-label", item.label || item.shortLabel || item.id);
       const hints = [item.description, item.hint];
       if (item.id === "free-deep" && skippedInfo) hints.push(skippedInfo.label, skippedInfo.hint);
+      if (item.id === "restore" && item.label) hints.unshift(item.label);
       const title = hints.filter(Boolean).join(" · ");
       if (title) button.setAttribute("title", title);
       if (item.id === "game-mode") button.setAttribute("data-zbw-base-title", title);
       if (item.checked !== undefined) {
         button.setAttribute("role", "switch");
         button.setAttribute("aria-checked", item.checked ? "true" : "false");
+      }
+      const badgeText = item.id === "restore" ? restoreBadgeText(restorableCount(snapshot)) : "";
+      if (badgeText) {
+        const badge = doc.createElement("span");
+        badge.className = "zbw-action-count";
+        badge.setAttribute("aria-hidden", "true");
+        badge.textContent = badgeText;
+        button.appendChild(badge);
       }
       button.disabled = item.available === false;
       button.setAttribute("aria-disabled", button.disabled ? "true" : "false");
@@ -335,6 +539,7 @@ function createCard({ root, mode }) {
       }
       popup.appendChild(button);
     }
+    updateContrast();
   }
 
   // G7: one event door from the Boost module. The card never asks for a second measurement; it paints the
@@ -424,14 +629,13 @@ function createCard({ root, mode }) {
 
   function showToast(message, action = null) {
     clearToast();
-    toastEl.textContent = String(message || "");
+    toastEl.textContent = "";
     toastEl.hidden = false;
+    const line = doc.createElement("span");
+    line.className = "zbw-toast-line";
+    line.textContent = String(message || "");
+    toastEl.appendChild(line);
     if (action && typeof action.run === "function") {
-      toastEl.textContent = "";
-      const line = doc.createElement("span");
-      line.className = "zbw-toast-line";
-      line.textContent = String(message || "");
-      toastEl.appendChild(line);
       const button = doc.createElement("button");
       button.type = "button";
       button.className = "zbw-toast-action";
@@ -443,6 +647,7 @@ function createCard({ root, mode }) {
       });
       toastEl.appendChild(button);
     }
+    updateContrast();
     toastTimer = setTimer(() => {
       toastTimer = null;
       clearToast();
@@ -572,6 +777,17 @@ function createCard({ root, mode }) {
     clearPreview();
     clearToast();
   });
+  ownListen(window, "zen-workspace-switched", updateContrast);
+  try {
+    const colorScheme = window.matchMedia?.("(prefers-color-scheme: dark)");
+    if (colorScheme?.addEventListener) {
+      ownListen(colorScheme, "change", updateContrast);
+    } else if (colorScheme?.addListener) {
+      colorScheme.addListener(updateContrast);
+      cardReleases.push(() => colorScheme.removeListener?.(updateContrast));
+    }
+  } catch (_) {}
+  updateContrast();
   refresh();
   return instance;
 }
@@ -616,7 +832,7 @@ function createSelfCard() {
     role: "group",
     ariaLabel: text("card.title"),
     defaultWidth: 300,
-    defaultHeight: 26,
+    defaultHeight: 96,
     getShowDelay: () => 0,
     getHideDelay: () => 0,
     getGap: () => 6,
@@ -997,5 +1213,11 @@ decisionTimer = setTimer(() => {
 return fullCleanup;
   }
 
-  targetWindow.__zentralBoostWidgetModule = Object.freeze({ mount: mountBoostWidget });
+  targetWindow.__zentralBoostWidgetModule = Object.freeze({
+    mount: mountBoostWidget,
+    contrastRatio,
+    effectiveBackground,
+    applyContrastSafety,
+    restoreBadgeText,
+  });
 })(window);

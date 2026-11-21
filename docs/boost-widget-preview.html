@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Boost widget narrow-sidebar preview</title>
+  <link rel="stylesheet" href="../additional/boost/ZentralBoostWidget.css">
+  <style>
+    :root { color-scheme: light dark; font: 14px/1.4 system-ui, sans-serif; }
+    body { box-sizing: border-box; margin: 0; padding: 20px; color: #1b1b1d; background: #f3f3f4; }
+    h1 { margin: 0 0 6px; font-size: 22px; }
+    .intro { max-width: 76ch; margin: 0 0 20px; }
+    .theme { margin: 18px 0; padding: 14px; border: 1px solid color-mix(in srgb, currentColor 22%, transparent); border-radius: 12px; }
+    .theme h2 { margin: 0 0 10px; font-size: 17px; }
+    .theme p { margin: 0 0 12px; color: color-mix(in srgb, currentColor 80%, transparent); font-size: 12px; }
+    .theme-light { --zen-colors-text: #1b1b1d; --zen-primary-color: #3157a4; --zen-colors-secondary: #e7e7e9; color: var(--zen-colors-text); background: #fff; }
+    .theme-dark { --zen-colors-text: #f3f3f3; --zen-primary-color: #8c7cff; --zen-colors-secondary: #292a2d; color: var(--zen-colors-text); background: #1e1f22; }
+    .theme-owner-like { --zen-colors-text: #ffffff; --zen-primary-color: #1b1b1b; --zen-colors-secondary: #252525; color: var(--zen-colors-text); background: #252525; }
+    .theme-bad { --zen-colors-text: #282828; --zen-primary-color: #272727; --zen-colors-secondary: #272727; color: var(--zen-colors-text); background: #272727; }
+    .sample-lane { display: flex; align-items: flex-start; gap: 14px; overflow-x: auto; padding: 4px 2px 14px; }
+    .sample { flex: 0 0 auto; }
+    .sample-label { margin: 0 0 5px; font-size: 11px; font-weight: 600; }
+    .demo-frame { box-sizing: border-box; padding: 0; border: 1px dashed color-mix(in srgb, currentColor 36%, transparent); }
+    .demo-frame[data-width="170"] { outline: 2px solid color-mix(in srgb, currentColor 60%, transparent); outline-offset: 2px; }
+    .zbw-card { margin-top: 2px; }
+    .demo-note { font-size: 11px; }
+    .forced-note { font-weight: 700; }
+  </style>
+</head>
+<body>
+  <h1>Boost widget: narrow sidebar preview</h1>
+  <p class="intro">This static page loads the shipped <code>ZentralBoostWidget.css</code> and the same one-shot contrast helper used by the card. Each theme shows 140, 170, 220, 300 and 360 CSS-pixel host widths; the outlined sample is 170 px. The bad theme should gain the luminance-matched forced palette automatically.</p>
+  <main id="previews"></main>
+  <script src="../additional/boost/ZentralBoostWidget.js"></script>
+  <script>
+    (() => {
+      const widths = [140, 170, 220, 300, 360];
+      const themes = [
+        { id: "light", title: "Light", note: "Light sidebar text and surface.", className: "theme-light" },
+        { id: "dark", title: "Dark", note: "Dark sidebar with a readable light text color.", className: "theme-dark" },
+        { id: "owner-like", title: "Owner-like", note: "White sidebar text on #252525 while the accent is deliberately dark.", className: "theme-owner-like" },
+        { id: "bad", title: "Deliberately bad", note: "Text #282828 is nearly the same as the #272727 surface; the contrast safety net should force a palette.", className: "theme-bad" },
+      ];
+      const host = document.getElementById("previews");
+      const module = window.__zentralBoostWidgetModule;
+
+      function makeCard(width) {
+        const card = document.createElement("div");
+        card.className = "zbw-card";
+        card.setAttribute("data-zbw-mount", "flow");
+        card.setAttribute("role", "group");
+        card.setAttribute("aria-label", "5.8 GB · Memory Boost");
+
+        const row = document.createElement("div");
+        row.className = "zbw-row";
+        const header = document.createElement("div");
+        header.className = "zbw-header";
+        const value = document.createElement("span");
+        value.className = "zbw-value";
+        value.setAttribute("data-zbw-level", "ok");
+        value.textContent = "5.8 GB";
+        const label = document.createElement("span");
+        label.className = "zbw-label";
+        label.textContent = "Memory Boost";
+        header.append(value, label);
+
+        const grid = document.createElement("div");
+        grid.className = "zbw-popup";
+        grid.setAttribute("role", "group");
+        grid.setAttribute("aria-label", "Boost levels and Restore");
+        const makeAction = (action, text, extra = {}) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "zbw-action";
+          button.setAttribute("data-zbw-action", action);
+          button.setAttribute("aria-label", extra.ariaLabel || text);
+          button.textContent = extra.marker ? "● " + text : text;
+          if (extra.checked !== undefined) {
+            button.setAttribute("role", "switch");
+            button.setAttribute("aria-checked", String(extra.checked));
+          }
+          if (extra.badge) {
+            const badge = document.createElement("span");
+            badge.className = "zbw-action-count";
+            badge.setAttribute("aria-hidden", "true");
+            badge.textContent = extra.badge;
+            button.appendChild(badge);
+          }
+          if (extra.title) button.title = extra.title;
+          return button;
+        };
+        grid.append(
+          makeAction("free-light", "Light", { title: "Light: memory minimize. No tabs touched." }),
+          makeAction("free-deep", "Deep", { title: "Deep: Light clean first, then eligible tabs sleep." }),
+          makeAction("game-mode", "Game", { marker: true, checked: true, title: "Game Mode is on." }),
+          makeAction("restore", "Restore", {
+            badge: "99+",
+            ariaLabel: "Restore (100 apps, 1 tab)",
+            title: "Restore (100 apps, 1 tab). Reloads what was unloaded.",
+          }),
+        );
+        row.append(header, grid);
+        card.appendChild(row);
+
+        const toast = document.createElement("div");
+        toast.className = "zbw-toast";
+        toast.setAttribute("role", "status");
+        const line = document.createElement("span");
+        line.className = "zbw-toast-line";
+        line.textContent = "Game Mode: freed 418 MB · 4 tabs and 1 app unloaded · kept: audio +2";
+        const restore = document.createElement("button");
+        restore.type = "button";
+        restore.className = "zbw-toast-action";
+        restore.textContent = "Restore";
+        restore.setAttribute("aria-label", "Restore the saved session");
+        toast.append(line, restore);
+        card.appendChild(toast);
+
+        if (width) card.dataset.previewWidth = String(width);
+        return card;
+      }
+
+      for (const theme of themes) {
+        const section = document.createElement("section");
+        section.className = `theme ${theme.className}`;
+        section.dataset.theme = theme.id;
+        const heading = document.createElement("h2");
+        heading.textContent = theme.title;
+        const note = document.createElement("p");
+        note.textContent = theme.note;
+        if (theme.id === "bad") note.className = "forced-note";
+        const lane = document.createElement("div");
+        lane.className = "sample-lane";
+        for (const width of widths) {
+          const sample = document.createElement("div");
+          sample.className = "sample";
+          const sampleLabel = document.createElement("div");
+          sampleLabel.className = "sample-label";
+          sampleLabel.textContent = `${width}px${width === 170 ? " · target" : ""}`;
+          const frame = document.createElement("div");
+          frame.className = "demo-frame";
+          frame.dataset.width = String(width);
+          frame.style.width = `${width}px`;
+          frame.appendChild(makeCard(width));
+          sample.append(sampleLabel, frame);
+          lane.appendChild(sample);
+        }
+        section.append(heading, note, lane);
+        host.appendChild(section);
+      }
+
+      requestAnimationFrame(() => {
+        for (const card of document.querySelectorAll(".zbw-card"))
+          module?.applyContrastSafety?.(card);
+      });
+    })();
+  </script>
+</body>
+</html>

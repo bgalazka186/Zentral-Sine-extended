@@ -36,9 +36,15 @@ sidebar chrome. No overlay is used in this main mode. If no safe target exists, 
 small anchor fallback. Hidden and compact-hidden sidebar states are CSS-controlled; turning the sidebar back on
 reveals the same tile without a polling loop.
 
-The OW-121 level group is one horizontal row, capped at 26 px high: **Light**, **Deep**, **Game** and **Restore**.
-It is not a drop-down list and adds no height to the widget. Each action keeps its deterministic one-line tooltip in
-English and Polish:
+On a narrow (~170 px) sidebar the widget shows a bold RAM value and translated **Memory Boost** label above a readable **2×2** grid:
+**Light**, **Deep**, **Game** and **Restore**. The card intentionally grows to roughly 85–90 px before any toast; at
+container widths of 280 px and above the value and four actions return to one compact row. Restore keeps its short
+visible label plus a count badge, while the full app/tab counts remain in its tooltip and accessible name. Result,
+Game Mode and Restore feedback is a wrapped block below the grid, with a full-width action when needed. The shipped
+preview is `docs/boost-widget-preview.html` (four themes, five widths). The card uses the sidebar text color and a
+translucent current-text tint; a one-shot contrast check applies a self-contained dark/light palette only when the
+measured text/background ratio falls below 4.5. Both flow and fallback mount modes share these styles. Each action
+keeps its deterministic tooltip in English and Polish:
 
 - **Light** — GC/CC + memory minimize. No tabs touched.
 - **Deep** — Light clean first, then eligible tabs sleep. Restore available.

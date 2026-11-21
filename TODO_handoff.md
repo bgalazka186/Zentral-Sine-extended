@@ -1490,3 +1490,23 @@ Historical `zbsw-*` CSS selectors and the `__zentralBoostStandaloneWidget` marke
 - `node tests/run-all.cjs`: **312/312 test files passed, 0 failed, 0 TODO failures**. The OW-123..OW-132 backlog file also passes 8/8; Boost coexistence passes 13/13 and the shared Boost widget suite passes 15/15.
 - The stale-version search finds no outdated package/version metadata. Its only `3.4.1` JavaScript hits outside `tests/` are historical feature comments in Notes and OW-130, not version markers; panel behavior was left untouched.
 - No live Zen/Sine visual or performance result is claimed. Keep all five Boost-widget owner gates open until owner screenshots/evidence arrive.
+
+## Boost widget visual follow-up — OW-121 responsive restyle (2026-11-21)
+
+Current release: **3.4.3**. This follow-up replaces the old single-row/fixed-26-px visual constraint at narrow widths while preserving the Boost card's behavior and translated string semantics.
+
+- `additional/boost/ZentralBoostWidget.css` now gives narrow sidebars a readable 2×2 action grid and uses a wide container-query layout when space permits. It removes the fixed 26 px row/overflow clipping, styles text-derived translucent card/button surfaces, keeps disabled action text fully opaque, lets card titles wrap, and allows full multiline toast text plus a full-width Restore action. Hidden/compact and `[hidden]` behavior is unchanged.
+- The header's visible title uses the existing translated `text("card.title")` (`Memory Boost` / `Pamięć Boost`), not a hard-coded English replacement. The four `data-zbw-action` IDs and `data-zbw-level` values, full action/Restore tooltip and ARIA copy, click wiring, Game Mode switch state, mount/seating and Widgets separation are preserved. Restore's visible count is a compact badge; the long counts remain in `title` and `aria-label`. Game Mode ON has a visible dot marker as well as `role="switch"` / `aria-checked`.
+- `ZentralBoostWidget.js` exposes pure `contrastRatio(fg, bg)` and `effectiveBackground(el)` helpers. Effective backgrounds alpha-composite no more than 12 ancestors. The one-shot safety check evaluates card text-bearing descendants against 4.5:1, runs on mount, paint/refresh, `zen-workspace-switched` and dark-scheme changes, and sets `data-zbw-contrast="forced"` plus the luminance-selected self-contained palette when needed. No polling, new interval or `:root` style observer was added.
+- `docs/boost-widget-preview.html` loads the shipped CSS and contrast helper and renders 140/170/220/300/360 px samples in light, dark, owner-like and deliberately low-contrast themes, with Game Mode ON, Restore badge and multiline toast. It is static preview evidence only, not a browser measurement.
+- Tests: `tests/boost-widget-look.test.cjs` 9/9; shared Boost widget 15/15; Boost coexistence 13/13; OW-121 5/5; G7 feedback 9/9. The stale one-row/fixed-height assertions and toast-line text assertions were updated. Current-version tests now compare package versions to the main version so the prescribed release bump remains testable.
+- The prescribed section 1 chain completed: `node tools/build-standalone.cjs --bump && node tools/sync-version.cjs && node tools/build-standalone.cjs && node tools/build-preferences.cjs && node tools/build-z-map.cjs && node tools/build-standalone.cjs --check`. It raised 3.4.2 to **3.4.3**, generated 607 Sine preferences (144 with free numeric entry), generated z-map 42/72/3, and reported standalone packages current. After the final extra-narrow badge-wrap tweak, rebuilt packages at the same version with `--keep-version`, reran preferences/z-map/standalone checks, and reran the full suite. `node tests/run-all.cjs`: **313/313 test files passed, 0 failed, 0 TODO failures**. The suite's expected failure-injection diagnostics remain on stderr.
+
+### New owner visual gates — OPEN
+
+No browser was available in the sandbox, so neither check below is marked complete:
+
+1. Inspect `docs/boost-widget-preview.html` at **170 px** in each of the four themes. Confirm the RAM value, translated title, four buttons, Restore badge, Game Mode ON marker and full multiline toast are readable and unclipped.
+2. Verify the real **170 px sidebar** in dark and light themes, including the value, all four buttons, Restore badge and Game Mode toast.
+
+Keep all five earlier W1–W7 real-browser owner gates open until the owner supplies their screenshots/evidence. Version stays at 3.4.3; do not bump again without explicit owner authorization.
