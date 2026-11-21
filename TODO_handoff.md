@@ -1398,7 +1398,7 @@ KEEP   loader/numeric-prefs.json:606:    "text": "zen.workspace.zentral.boost.ga
 
 ## Boost-widget follow-up W2 — shared Boost-owned card source (2026-11-21)
 
-W2 is complete on this branch. The one card source is now `additional/boost/ZentralBoostWidget.js`; the standalone Boost package embeds it, while the full-pack catalog preloads that same source and the Boost-owned CSS. The card uses only the small loader adapter (document/window, sidebar rect/hover fallback, lifecycle timers/listeners, host-unload callback) and Boost's own API. It no longer probes or calls a Widgets API. The Boost-owned EN/PL table carries the newer level descriptions, G7 feedback, snapshot Restore wording/counts, skipped-result line and limiter notices, plus standalone card labels. CSS selectors are `zbw-*`.
+W2 is complete on this branch. The one card source is now `additional/boost/ZentralBoostWidget.js`; the standalone Boost package embeds it, while the full-pack catalog preloads that same source and the Boost-owned CSS. The card uses only the small loader adapter (document/window, sidebar rect/hover fallback, lifecycle timers/listeners, host-unload callback) and Boost's own API. It no longer probes or calls a Widgets API. The Boost-owned EN/PL table carries the newer level descriptions, G7 feedback, snapshot Restore wording/counts, skipped-result line and limiter notices, plus standalone card labels. CSS selectors are `zbw-*`. The retired `zbsw-*` CSS names and `__zentralBoostStandaloneWidget` marker were replaced in W2 by `zbw-*` and `__zentralBoostWidget`.
 
 W2 validation: `tests/boost-standalone-widget.test.cjs` 11/11, `tests/ow-121-boost-ux.test.cjs` 6/6, `tests/g7-game-mode-feedback.test.cjs` 10/10, `tests/source-integrity.test.cjs` 3/3; `node tools/build-standalone.cjs --keep-version` succeeded, and the Boost test's `--check` + settings consistency checks passed. No real-browser checks or screenshots have been done.
 
@@ -1479,3 +1479,14 @@ The W1–W7 validation above remains a historical record of version 3.4.1. C1 ra
 ## Boost-widget follow-up 5 — C2 video adjacency (2026-11-21)
 
 `safeFlowMountTarget()` now re-checks the player boundary after the tray-relative adjustment. If `before` is the video preview and its previous sibling is a seat anchor or the tray, Boost seats after the video instead. New coexistence case 9b was run against the pre-fix code and failed because Boost became `video.previousSibling`; after the guard and standalone rebuild, the coexistence suite passes 13/13. The regression is fake-DOM/generated-bundle evidence only; real Zen visual gates remain open.
+
+## Boost-widget follow-up 5 — C3 name mapping (2026-11-21)
+
+Historical `zbsw-*` CSS selectors and the `__zentralBoostStandaloneWidget` marker are retired; W2 replaced them with `zbw-*` and `__zentralBoostWidget`. Old audit/history lines remain unchanged.
+
+### Final validation for C1–C3
+
+- The prescribed release chain completed: all 12 standalone packages rebuilt, Sine preferences generated (607 entries, 144 with free numeric entry), the z-height map generated, and the standalone, catalog, settings, layout and version checks passed. `sync-version --check` reports 3.4.2 across current version markers.
+- `node tests/run-all.cjs`: **312/312 test files passed, 0 failed, 0 TODO failures**. The OW-123..OW-132 backlog file also passes 8/8; Boost coexistence passes 13/13 and the shared Boost widget suite passes 15/15.
+- The stale-version search finds no outdated package/version metadata. Its only `3.4.1` JavaScript hits outside `tests/` are historical feature comments in Notes and OW-130, not version markers; panel behavior was left untouched.
+- No live Zen/Sine visual or performance result is claimed. Keep all five Boost-widget owner gates open until owner screenshots/evidence arrive.
