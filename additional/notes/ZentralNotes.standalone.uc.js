@@ -25140,6 +25140,15 @@ __zentralShim.register = function (def) {
             return null;
           }
         },
+        // Resolves a pasted-picture asset link to its absolute file path, using exactly the same resolution as
+        // readAsset. The caller is responsible for checking that the file still exists (launching it is an OS
+        // side effect that must not touch a path that is gone). Returns null for an invalid link.
+        assetPath(src) {
+          const link = parseAssetLink(src);
+          if (!link || !dir) return null;
+          const ownerBase = notes.has(link.noteId) ? noteDir(link.noteId) : dir;
+          return io.join(ownerBase, ASSET_DIR, link.noteId, link.file);
+        },
         /* NOT ACTIVE CODE (kept for a possible future sync through a linked GitHub repository; Zen Sync is rejected, see mergeRemote's comment).
          * adoptRemote(r) takes a note that arrived from elsewhere ({ id, body, folder, color, updated }) after a merge decision said
          * "create" or "update", and stores it under its own id; the first overwrite of an existing file is backed up (.bak) by writeNoteFile.
@@ -30860,6 +30869,13 @@ __zentralShim.register = function (def) {
           holder.append(icon("image", 12), h("span", {}, n.alt || "picture"));
           holder.title = "Loading picture\u2026";
           wrap.append(holder);
+          // Right-click on a pasted picture: the sheet offers its own menu (open in the default app,
+          // open in a new card) pointing at the file this note saved, not at a network address.
+          wrap.addEventListener("contextmenu", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            try { env.openAssetPictureMenu?.(event, n.asset); } catch (_) {}
+          });
           const load = env.loadAsset ? Promise.resolve(env.loadAsset(n.asset)) : Promise.resolve(null);
           load.then((got) => {
             if (!got?.url) { holder.title = "Picture not found: " + n.asset; return; }
@@ -33132,8 +33148,57 @@ __zentralShim.register = function (def) {
         const t = store.get(id);
         return t ? { title: titleOf(t.body) || "Untitled note", trashed: !!t.trashed, desc: hubDescription(t) } : null;
       };
+      // ---- pasted pictures (P2): the read pane's right-click menu ----------------
+      // RMB on a pasted picture (read mode / split mode) opens the file this note saved, via the OS handler or a new browser card.
+      // Never a network address, never anything outside this note's own assets folder.
+      function picturePath(rel) {
+        try {
+          return typeof store.assetPath === "function" ? store.assetPath(rel) : null;
+        } catch (_) { return null; }
+      }
+      function pictureNotFound(rel) {
+        flash("Picture not found: " + String(rel ?? "").split("/").pop());
+      }
+      async function openAssetPictureInDefaultApp(rel) {
+        if (destroyed) return;
+        const path = picturePath(rel);
+        if (!path) return pictureNotFound(rel);
+        try {
+          if (!(await realIO.exists(path))) return pictureNotFound(rel);
+          const f = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
+          f.initWithPath(path);
+          f.launch();
+        } catch (error) {
+          warn(error);
+          flash("Couldn't open the picture in the default app.");
+        }
+      }
+      async function openAssetPictureInNewCard(rel) {
+        if (destroyed) return;
+        const path = picturePath(rel);
+        if (!path) return pictureNotFound(rel);
+        try {
+          if (!(await realIO.exists(path))) return pictureNotFound(rel);
+          window.gBrowser.addTab(PathUtils.toFileURI(path), {
+            triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
+          });
+        } catch (error) {
+          warn(error);
+          flash("Couldn't open the picture in a new card.");
+        }
+      }
+      function showAssetPictureMenu(event, rel) {
+        if (destroyed) return;
+        const pointer = event && Number.isFinite(event.clientX) && Number.isFinite(event.clientY) && (event.clientX || event.clientY);
+        const anchor = pointer ? pointAnchor(event) : (event?.target?.closest?.(".zn-pic") || root);
+        showMenu(anchor, [
+          { icon: "outside", label: "Open in default app", action: () => openAssetPictureInDefaultApp(rel) },
+          { icon: "maximize", label: "Open in new card", action: () => openAssetPictureInNewCard(rel) },
+        ]);
+      }
       // Delegates to the caller's env (live: later changes to it stay visible) and only adds the two lookups.
       env = Object.assign(Object.create(env), {
+        openAssetPictureMenu: (event, rel) => showAssetPictureMenu(event, rel),
         surfaceSpec: () => currentSurfaceSpec(),
         noteInfo,
         renderEmbed,

@@ -1643,7 +1643,7 @@
 }
 
 /* ---- pasted pictures (P2) ------------------------------------------------------ */
-.zentral-notes-sheet .zn-read .zn-pic { display: inline-block; max-width: 100%; }
+.zentral-notes-sheet .zn-read .zn-pic { display: inline-block; max-width: 100%; cursor: context-menu; }
 .zentral-notes-sheet .zn-read .zn-pic[data-align] { display: block; }
 .zentral-notes-sheet .zn-read .zn-pic[data-align="left"] { text-align: left; }
 .zentral-notes-sheet .zn-read .zn-pic[data-align="center"] { text-align: center; }

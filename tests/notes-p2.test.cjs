@@ -198,6 +198,19 @@ test("assets: full-size per-note limit", async () => {
   for (let i = 0; i < c.ASSET_MAX_PER_NOTE; i++) io.files.set("/n/assets/" + n.id + "/f" + i + ".png", { bytes: PNG });
   assert.equal((await store.saveAsset(n.id, PNG)).reason, "too-many");
 });
+test("assets: assetPath resolves a pasted picture's file like readAsset does", async () => {
+  const io = fakeIO(), clk = clock(Date.UTC(2026, 10, 1, 9, 0, 0));
+  const store = mkStore(io, clk); await store.open();
+  const n = store.create("note with picture");
+  const saved = await store.saveAsset(n.id, PNG, "image/png");
+  assert.equal(saved.ok, true);
+  assert.equal(store.assetPath(saved.rel), "/n/" + saved.rel, "the RMB menu's launcher resolves the same file");
+  assert.equal(store.assetPath("assets/../meta.json"), null, "traversal refused");
+  assert.equal(store.assetPath("assets/" + n.id + "/img.svg"), null, "SVG is not a picture link");
+  assert.equal(store.assetPath("assets/" + n.id + "/clip.mp4"), null, "a video is not a picture link");
+  assert.equal(store.assetPath("assets/" + n.id + "/nope.png"), "/n/assets/" + n.id + "/nope.png", "the path resolves even before the file is checked");
+  assert.equal(store.assetPath("nope"), null, "anything that is not a picture link is refused");
+});
 
 // ---- reminders ------------------------------------------------------------------------------------
 const T0 = Date.UTC(2026, 10, 1, 9, 0, 0);
