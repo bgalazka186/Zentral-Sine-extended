@@ -71,9 +71,9 @@ try {
     assert.equal(cleared.x.color, undefined, "Inherit removes only the item override");
   });
 
-  test("3. the composer exposes a color input, an Inherit control and the resolved preview", () => {
+  test("3. the composer exposes a colour well, an Inherit control and the resolved preview", () => {
     for (const term of [
-      "zn-cal-compose-color-input",
+      "zn-color-well",
       "zn-cal-compose-color-inherit",
       "customColor",
       "resolveCalendarItemColor",
@@ -81,15 +81,18 @@ try {
       "colorPreview",
       "colorLabel",
     ]) assert.ok(NOTES.includes(term), term + " is wired into the composer");
-    assert.match(NOTES, /type: "color"/);
-    assert.match(NOTES, /colorInput\.addEventListener\("change"/);
+    // OW-133: the composer's override is chosen in the in-app well. A native `input[type=color]` is a platform
+    // dialog anchored to the control: hiding the card underneath it lost the picked colour and left its grab
+    // behind, so the composer must not use one (tests/ow-133-no-native-popups.test.cjs enforces this everywhere).
+    assert.match(NOTES, /const colorWellCtl = colorWell\(/);
+    assert.match(NOTES, /colorWellCtl\.sync\(/);
     assert.match(NOTES, /colorInheritBtn\.addEventListener\("click"/);
     assert.match(NOTES, /resolveCalendarItemColor\(\{[\s\S]{0,200}customColor/);
     assert.match(read("additional/notes/i18n/en.js"), /"compose\.color\.custom"/);
     assert.match(read("additional/notes/i18n/pl.js"), /"compose\.color\.custom"/);
     assert.match(read("additional/notes/i18n/en.js"), /"compose\.color\.inherit"/);
     assert.match(read("additional/notes/i18n/pl.js"), /"compose\.color\.inherit"/);
-    assert.match(read("additional/notes/ZentralNotes.css"), /\.zn-cal-compose-color-input/);
+    assert.match(read("additional/notes/ZentralNotes.css"), /\.zn-color-well\b/);
   });
 
   test("4. every DEMO note has a stable, distinct colour and the installer only colours new notes", () => {

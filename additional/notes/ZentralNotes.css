@@ -2182,8 +2182,18 @@
 .zentral-notes-sheet .zn-swatch-add { display: inline-flex; align-items: center; justify-content: center; background: transparent; border: 1px dashed currentColor; color: inherit; line-height: 1; }
 .zentral-notes-sheet .zn-color-picker { display: flex; flex-direction: column; gap: 8px; margin: 6px 0; }
 .zentral-notes-sheet .zn-color-picker-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.zentral-notes-sheet .zn-color-input { width: 36px; height: 28px; padding: 0; border: 1px solid color-mix(in srgb, currentColor 25%, transparent); border-radius: 6px; background: transparent; cursor: pointer; }
 .zentral-notes-sheet .zn-hex-field { width: 92px; font-family: monospace; }
+/* OW-133: the in-app colour well — swatch + HSL sliders + #rrggbb + quick colours, opened in place. It replaces
+   every native `input[type=color]` in a Notes surface: that platform dialog is anchored to its input, so hiding
+   the sheet/panel underneath it left the dialog's grab behind and the window stopped taking clicks. */
+.zentral-notes-sheet .zn-color-well-host { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; }
+.zentral-notes-sheet .zn-color-well-host[data-open] { flex: 1 1 100%; }
+.zentral-notes-sheet .zn-color-well { width: 32px; height: 24px; padding: 0; flex: none; border: 1px solid color-mix(in srgb, currentColor 25%, transparent); border-radius: 6px; background: transparent; cursor: pointer; }
+.zentral-notes-sheet .zn-color-well:focus-visible { outline: 2px solid var(--zn-accent); outline-offset: 1px; }
+.zentral-notes-sheet .zn-color-well-body { display: grid; gap: 6px; flex: 1 1 100%; min-width: 0; }
+.zentral-notes-sheet .zn-color-well-body[hidden] { display: none; }
+.zentral-notes-sheet .zn-color-well-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.zentral-notes-sheet .zn-color-range { flex: 1 1 6em; min-width: 5em; height: 18px; margin: 0; }
 .zentral-notes-sheet .zn-palette-preview { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid var(--zn-line); border-radius: 8px; background: var(--zn-surface); font-size: 11px; }
 .zentral-notes-sheet .zn-palette-preview-pill { padding: 2px 8px; border-radius: 999px; border: 1px solid var(--zn-pal-outline, var(--zn-line)); background: var(--zn-pal-bg, transparent); color: var(--zn-pal-fg, var(--zn-text)); }
 .zentral-notes-sheet .zn-palette-preview-pill[data-state="hover"] { background: var(--zn-pal-hover, var(--zn-hover)); color: var(--zn-pal-hover-fg, var(--zn-pal-fg, var(--zn-text))); }
@@ -2215,9 +2225,8 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-fstyle-behavior > p { margin: 5px 0 7px; font-size: 11px; }
 .zentral-notes-sheet .zn-fstyle-behavior .zn-fstyle-check { margin: 6px 0; }
 .zn-fstyle-details > summary { cursor: pointer; font-size: 12px; }
-.zn-fstyle-part { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
+.zn-fstyle-part { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 5px 0; }
 .zn-fstyle-part > span { flex: 1; min-width: 0; font-size: 12px; }
-.zn-fstyle-part input[type=color] { width: 36px; height: 26px; padding: 0; }
 
 /* The native 2px folder accent line is reused by Colorful Folders and Notes. */
 :root:not([bgalazka-fc-no-accent]) zen-folder[bgalazka-fc-layers~="accent"] > .tab-group-container {
@@ -2770,9 +2779,8 @@ zen-folder[id^="bgalazka-zentral-notes-sub_"] > .tab-group-label-container > lab
 .zentral-notes-sheet .zn-cal-compose-date-row .zn-field-row { min-width: 0; }
 .zentral-notes-sheet .zn-cal-compose-date-row .zn-field { width: 100%; box-sizing: border-box; }
 .zentral-notes-sheet .zn-cal-compose-clock-host:empty { display: none; }
-.zentral-notes-sheet .zn-cal-compose-color-row { display: flex; align-items: center; gap: 8px; margin: 5px 0 10px; color: var(--zn-muted); font-size: .85em; }
+.zentral-notes-sheet .zn-cal-compose-color-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 5px 0 10px; color: var(--zn-muted); font-size: .85em; }
 .zentral-notes-sheet .zn-cal-compose-color { width: 1em; height: 1em; flex: none; border: 1px solid var(--zn-line); border-radius: 50%; }
-.zentral-notes-sheet .zn-cal-compose-color-input { width: 26px; height: 22px; padding: 1px; flex: none; border: 1px solid var(--zn-line); border-radius: 5px; background: transparent; cursor: pointer; }
 .zentral-notes-sheet .zn-cal-compose-color-inherit { flex: none; padding: 2px 7px; font-size: .9em; }
 .zentral-notes-sheet .zn-cal-compose-color-inherit:disabled { opacity: .55; cursor: default; }
 .zentral-notes-sheet .zn-cal-compose-section { min-width: 0; }

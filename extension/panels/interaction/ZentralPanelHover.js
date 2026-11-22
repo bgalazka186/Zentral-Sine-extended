@@ -500,6 +500,12 @@
         document.removeEventListener("zentral-notes-request-reveal", onNotesRevealRequest),
       );
       function hoverMenuVisible() {
+        // A platform picker (`input[type=color|time|…]`) or a native <select> dropdown owns the pointer while it
+        // is open and fires no `popupshowing`, so it never reaches hoverOpenPopups. Notes publishes this marker
+        // for exactly that window: sliding the panel away would remove the control the popup is anchored to and
+        // leave its grab behind, which makes the whole window ignore every click (OW-133).
+        if (document.documentElement.hasAttribute("bgalazka-native-popup-open"))
+          return true;
         for (const popup of hoverOpenPopups) {
           if (!popup.isConnected || popup.state === "closed")
             hoverOpenPopups.delete(popup);

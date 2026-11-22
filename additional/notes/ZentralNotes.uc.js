@@ -16637,6 +16637,13 @@
         HIDEABLE_TOOLS, parseHidden, serializeHidden, applyTreeSelection, resolveTreeSelection, cleanBatchTag, appendTagToBody,
         normalizeGeo, clampGeo, moveGeo, resizeGeo, placeSheet, keepClear, clearOfRect, sideOf, createHoldAction,
         PILL_AUTOHIDE_HOLD_MS, PANEL_HIDDEN_ONCE_ATTR, zentralPanelHidden,
+        // OW-133: the hold lives further down this closure, so its constants are read through getters (a plain
+        // reference here would be a TDZ ReferenceError while the module loads).
+        get NATIVE_POPUP_CONTROL() { return NATIVE_POPUP_CONTROL; },
+        get NATIVE_POPUP_ATTR() { return NATIVE_POPUP_ATTR; },
+        get NATIVE_POPUP_HOLD_MS() { return NATIVE_POPUP_HOLD_MS; },
+        get NATIVE_POPUP_SETTLE_MS() { return NATIVE_POPUP_SETTLE_MS; },
+        nativePopupControl, createNativePopupHold, createDeferredTeardown,
         pushRecent, cleanRecent, GEO_MIN, RESIZE_HANDLES,
         cleanLabel, NOTE_THEMES, normalizeTheme, pushAmount,
         clampShare, slotShare, slotPx, clampSlotPx, cleanSlotPx, cleanCardPx, cleanCardShare, resolveSlotHeight, resolveCardHeight, hasStartupPanelPref, gapEdgeDrag, panelSpansFullHeight, dockBandTop, slotDragShare, followTarget, chooseHost, cleanCardDock, cardView, cardSnapSide, cardDockRect, cardPush, cardBaseRect, cardPillPlace, cardDetachRect, cardPillOffset, pagesWithoutSlotHeight, gapPageFloor, gapMaxPx, clampGapPx, GAP_PANEL_MIN_PX, SLOT_MIN_SHARE, SLOT_MAX_SHARE, SLOT_LARGE_SHARE,
@@ -17343,6 +17350,152 @@
       return { start, end: end < 0 ? text.length : end };
     }
 
+    // OW-133: a platform picker (`input[type=color]`, `time`, `date`, …) and a native `<select>` dropdown take
+    // the pointer while they are open, and they stay anchored to the control that opened them. Removing that
+    // control, or hiding the top-layer popover that owns it, leaves the platform grab behind: the window then
+    // ignores every click until it is restarted. Such a popup also fires no `popupshowing` (that event is XUL
+    // only), so the panel's own menu guard cannot see it and slides away underneath it. One bounded hold per
+    // window answers both halves: Notes refuses an involuntary teardown while a control that can own a platform
+    // popup is engaged, and publishes `bgalazka-native-popup-open` so the panel does not hide either. The hold is
+    // capped and is released by every signal a closed picker gives (`change`, `popuphidden`, the window's focus
+    // coming back), so a picker that never reports back can never pin a panel forever.
+    // <<OW-133 NATIVE POPUP HOLD>>
+    const NATIVE_POPUP_CONTROL = 'select,input[type="color"],input[type="date"],input[type="datetime-local"],input[type="file"],input[type="month"],input[type="time"],input[type="week"],input[list]';
+    const NATIVE_POPUP_ATTR = "bgalazka-native-popup-open";
+    const NATIVE_POPUP_HOLD_MS = 20000;
+    const NATIVE_POPUP_SETTLE_MS = 200;
+    function nativePopupControl(node) {
+      if (!node || node.nodeType !== 1 || typeof node.closest !== "function") return null;
+      try {
+        return node.closest(NATIVE_POPUP_CONTROL) || null;
+      } catch (_) {
+        return null;
+      }
+    }
+    function createNativePopupHold({
+      doc = document,
+      win = window,
+      setTimer = (fn, ms) => window.setTimeout(fn, ms),
+      clearTimer = (id) => window.clearTimeout(id),
+      holdMs = NATIVE_POPUP_HOLD_MS,
+    } = {}) {
+      let until = 0;
+      let expireTimer = 0;
+      let settleTimer = 0;
+      let published = false;
+      const waiters = [];
+      const ui = () => doc?.documentElement;
+      const bounded = (ms) => Math.max(1, Math.min(holdMs, Math.round(Number(ms) || holdMs)));
+      const held = () => Date.now() < until;
+      function publish(next) {
+        if (published === next) return;
+        published = next;
+        const el = ui();
+        if (!el) return;
+        try {
+          if (next) el.setAttribute(NATIVE_POPUP_ATTR, "true");
+          else if (el.hasAttribute(NATIVE_POPUP_ATTR)) el.removeAttribute(NATIVE_POPUP_ATTR);
+        } catch (_) {}
+      }
+      function clearTimers() {
+        if (expireTimer) clearTimer(expireTimer);
+        expireTimer = 0;
+        if (settleTimer) clearTimer(settleTimer);
+        settleTimer = 0;
+      }
+      // End the hold and run exactly the work that waited for it (a deferred fold/close).
+      function release() {
+        const was = held() || published;
+        clearTimers();
+        until = 0;
+        publish(false);
+        if (!was) return;
+        for (const fn of waiters.splice(0)) {
+          try {
+            fn();
+          } catch (_) {}
+        }
+      }
+      // `engage` runs from a real interaction with a control that opens a platform popup. Working with the picker
+      // refreshes the deadline, because the person is still inside it.
+      function engage(control, ms = holdMs) {
+        if (!nativePopupControl(control)) return false;
+        const now = Date.now();
+        until = Math.max(until, now + bounded(ms));
+        if (expireTimer) clearTimer(expireTimer);
+        expireTimer = setTimer(() => {
+          expireTimer = 0;
+          if (!held()) release();
+        }, Math.max(0, until - now) + 20);
+        if (settleTimer) {
+          clearTimer(settleTimer);
+          settleTimer = 0;
+        }
+        publish(true);
+        return true;
+      }
+      // A closed picker reports itself in more than one way (change, popuphidden, the window focus coming back).
+      // Waiting one settle turn keeps that report from racing the click that dismissed it.
+      function releaseSoon(ms = NATIVE_POPUP_SETTLE_MS) {
+        if (!held()) {
+          release();
+          return false;
+        }
+        if (settleTimer) clearTimer(settleTimer);
+        settleTimer = setTimer(() => {
+          settleTimer = 0;
+          release();
+        }, bounded(ms));
+        return true;
+      }
+      function onRelease(fn) {
+        if (typeof fn === "function") waiters.push(fn);
+      }
+      return { held, engage, release, releaseSoon, onRelease, control: nativePopupControl, attribute: NATIVE_POPUP_ATTR, selector: NATIVE_POPUP_CONTROL };
+    }
+    // <<OW-133 DEFERRED TEARDOWN>>
+    // The other half of the hold: work that had to wait for a platform popup (a fold, a close, a card being taken
+    // away). One timer, one drain, each step isolated — a step that throws must not skip the ones after it, which
+    // is what used to leave a collapsed sheet with a top-layer card still over a panel that was already gone.
+    function createDeferredTeardown({ win = window, alive = () => true, warn = () => {}, runAfter = 120 } = {}) {
+      const waiting = new Set();
+      let timer = 0;
+      // Module teardown: drop the timer AND the queued work (there is no sheet left to fold or close).
+      function cancel() {
+        if (timer) win.clearTimeout(timer);
+        timer = 0;
+        waiting.clear();
+      }
+      function flush() {
+        if (timer) win.clearTimeout(timer);
+        timer = 0;
+        const steps = [...waiting];
+        waiting.clear();
+        if (!alive()) return 0;
+        for (const step of steps) {
+          try {
+            step();
+          } catch (error) {
+            warn(error);
+          }
+        }
+        return steps.length;
+      }
+      function defer(step) {
+        if (typeof step === "function") waiting.add(step);
+        if (!timer) {
+          timer = win.setTimeout(() => {
+            timer = 0;
+            flush();
+          }, runAfter);
+        }
+        return true;
+      }
+      return { defer, flush, cancel, runAfter, pending: () => waiting.size, armed: () => timer !== 0 };
+    }
+    // <<OW-133 DEFERRED TEARDOWN END>>
+    // <<OW-133 NATIVE POPUP HOLD END>>
+
     function createSheet({ store, adapter, env, ensureStore }) {
       const token = {};
       const cleanups = [];
@@ -17385,6 +17538,7 @@
       let unwatch = null;
       let confirmTimer = 0;
       let destroyed = false;
+      let destroying = false, unloadingClose = false;
       let previewTimer = 0; // armed only while split view waits for typing to pause
       let flashTimer = 0; // armed only while a short message is showing
       let flashMsg = "";
@@ -17423,6 +17577,55 @@
         "aria-label": "Notes",
       });
       root.hidden = true;
+      // OW-133: one hold per sheet. It is consulted by every involuntary teardown (panel autohide, hover grace,
+      // outside press, popover drop) and publishes the window-wide marker the panel's hover guard reads.
+      const nativePopup = createNativePopupHold({ doc: document, win: window });
+      // Things that had to wait for an open platform popup (a fold, a close): the factory above owns the single
+      // timer and the single drain, and drops the work when the sheet is already gone.
+      const deferredTeardown = createDeferredTeardown({ win: window, alive: () => !destroyed && isOpen, warn });
+      function flushDeferredTeardown() {
+        return deferredTeardown.flush();
+      }
+      function deferTeardown(step) {
+        return deferredTeardown.defer(step);
+      }
+      nativePopup.onRelease(flushDeferredTeardown);
+      const onNativePopupControl = (event) => {
+        const control = nativePopup.control(event.target);
+        if (!control || !root.contains(control)) return;
+        nativePopup.engage(control);
+      };
+      for (const type of ["pointerdown", "mousedown", "click"]) listen(root, type, onNativePopupControl, true);
+      listen(root, "keydown", (event) => {
+        if (!["Enter", " ", "Spacebar", "ArrowDown", "ArrowUp"].includes(event.key)) return;
+        onNativePopupControl(event);
+      }, true);
+      listen(root, "input", onNativePopupControl, true);
+      listen(root, "change", (event) => {
+        const control = nativePopup.control(event.target);
+        if (control && root.contains(control)) nativePopup.releaseSoon(NATIVE_POPUP_SETTLE_MS);
+      }, true);
+      // XUL pickers and dropdowns report themselves; a platform dialog only comes back as the window's focus.
+      listen(window, "popupshowing", () => {
+        const active = document.activeElement;
+        if (active && root.contains(active)) nativePopup.engage(active);
+      }, true);
+      listen(window, "popuphidden", () => nativePopup.releaseSoon(120), true);
+      listen(window, "focus", () => {
+        if (nativePopup.held()) nativePopup.releaseSoon(400);
+      });
+      // A pointer that leaves the picker and presses something else has finished with it. Listened for on the
+      // document, not the window: the window's own pointer listener is the menus' outside-press door, and this hold
+      // must not look like a menu to anything that counts those.
+      listen(document, "pointerdown", (event) => {
+        if (!nativePopup.held()) return;
+        if (nativePopup.control(event.target)) return;
+        nativePopup.releaseSoon(NATIVE_POPUP_SETTLE_MS);
+      }, true);
+      cleanups.push(() => {
+        deferredTeardown.cancel();
+        nativePopup.release();
+      });
       const btnList = iconButton("list", "All notes (Ctrl+K)", "zn-list-btn");
       const titleEl = h("button", { type: "button", class: "zn-title", title: "All notes" });
       const btnPin = iconButton("bookmark", "Pin note to the top of the list");
@@ -22029,25 +22232,29 @@
           h("p", { class: "zn-empty" }, t("compose.agenda.help")));
         const colorPreview = h("span", { class: "zn-cal-compose-color", "aria-hidden": "true" });
         const colorLabel = h("span", { class: "zn-cal-compose-color-label", "aria-live": "polite" }, t("compose.color.default"));
-        // OW-131: a native colour input is this item's override. Inherit removes
-        // only that override; the category and linked note keep their colours.
+        // OW-131: the item's own colour override. OW-133: the override is chosen in the in-app well, never in a
+        // native `input[type=color]` (that platform dialog is anchored to the input: an autohide underneath it
+        // orphaned its grab — the whole window stopped taking clicks — and a picked colour never came back).
+        // Inherit removes only the override; the category and linked note keep their colours.
         const initialCustomColor = C.cleanItemColor(original?.x?.color || "");
         let customColor = initialCustomColor;
-        const colorInput = h("input", { type: "color", class: "zn-cal-compose-color-input", "aria-label": t("compose.color.custom") });
-        colorInput.value = C.PALETTE_COLOR_HEX[initialCustomColor.toLowerCase()] || initialCustomColor || "#5aa9ff";
+        const colorWellCtl = colorWell(
+          C.PALETTE_COLOR_HEX[initialCustomColor.toLowerCase()] || initialCustomColor || "#5aa9ff",
+          (hex) => {
+            customColor = C.cleanItemColor(hex);
+            syncComposeInheritance();
+          },
+          { label: t("compose.color.custom") },
+        );
         const colorInheritBtn = h("button", { type: "button", class: "zn-chip zn-cal-compose-color-inherit", "aria-pressed": initialCustomColor ? "true" : "false" }, t("compose.color.inherit"));
-        const colorRow = h("div", { class: "zn-cal-compose-color-row" }, colorPreview, colorInput, colorInheritBtn, colorLabel);
-        colorInput.addEventListener("change", () => {
-          customColor = C.cleanItemColor(colorInput.value);
-          syncComposeInheritance();
-        });
+        const colorRow = h("div", { class: "zn-cal-compose-color-row" }, colorPreview, colorWellCtl.element, colorInheritBtn, colorLabel);
         colorInheritBtn.addEventListener("click", () => {
           customColor = "";
           const layers = composeLayers();
           const inherited = C.resolveCalendarItemColor({
             itemColor: "", noteColor: layers.note?.color || "", categoryColor: layers.category?.color || "",
           });
-          colorInput.value = inherited.effectiveHex || "#5aa9ff";
+          colorWellCtl.sync(inherited.effectiveHex || "#5aa9ff");
           syncComposeInheritance();
         });
 
@@ -24517,21 +24724,15 @@
         primaryAuto.addEventListener("click", () => { color = ""; syncAll(); });
         const primaryBox = h("div", {}, h("div", { class: "zn-fstyle-group-label" }, "Primary color (the folder)"), picker.el, primaryAuto);
 
-        // secondary color: the outline
-        const edgeInput = h("input", { type: "color", class: "zn-color-input", "aria-label": "Secondary outline color" });
-        const edgeHex = h("input", { type: "text", class: "zn-hex-field", maxlength: "7", spellcheck: "false", placeholder: "auto", "aria-label": "Secondary outline color hex" });
-        const edgeAuto = chip("Auto");
-        const edgeWarn = h("div", { class: "zn-fstyle-warn", role: "status" });
-        const setEdge = (value) => {
-          const hex = cleanHex(value);
-          if (!hex) return;
+        // secondary color: the outline. Same in-app well as everything else that picks a colour (OW-133).
+        const edgeWell = colorWell(parts.stroke || colorHex(color) || "#667788", (hex) => {
           parts.stroke = hex;
           syncAll(false, true);
-        };
-        edgeInput.addEventListener("input", () => setEdge(edgeInput.value));
-        edgeHex.addEventListener("input", () => { const raw = edgeHex.value.trim(); setEdge(raw.startsWith("#") ? raw : "#" + raw); });
+        }, { label: "Secondary outline color", quick: false });
+        const edgeAuto = chip("Auto");
+        const edgeWarn = h("div", { class: "zn-fstyle-warn", role: "status" });
         edgeAuto.addEventListener("click", () => { delete parts.stroke; syncAll(); });
-        const edgeRow = h("div", { class: "zn-fstyle-edge" }, h("span", {}, "Secondary color (outline)"), edgeInput, edgeHex, edgeAuto);
+        const edgeRow = h("div", { class: "zn-fstyle-edge" }, h("span", {}, "Secondary color (outline)"), edgeWell.element, edgeAuto);
 
         // folder transparency (simple): one slider for the two big layers
         const bodyAlpha = h("input", { type: "range", min: "0", max: "100", step: "1", "aria-label": "Folder transparency" });
@@ -24552,19 +24753,15 @@
           label: "Folder name", accent: "Folder and tab selection accent", tint: "Soft tint", hover: "Hover background",
         };
         for (const part of FOLDER_PARTS) {
-          const input = h("input", { type: "color", class: "zn-color-input", "aria-label": partLabels[part] });
-          const hex = h("input", { type: "text", class: "zn-hex-field", maxlength: "7", spellcheck: "false", placeholder: "auto", "aria-label": partLabels[part] + " hex" });
+          const well = colorWell(parts[part] || colorHex(color) || "#667788", (hex) => {
+            parts[part] = hex;
+            syncAll(false, false, part);
+          }, { label: partLabels[part], quick: false });
           const alpha = h("input", { type: "range", min: "0", max: "100", step: "1", "aria-label": partLabels[part] + " opacity" });
           const opacityValue = h("output", { class: "zn-fstyle-opacity-value" }, "Auto");
           const auto = chip("Auto");
           const opacityRow = h("span", { class: "zn-fstyle-opacity" }, h("span", {}, "Opacity"), alpha, opacityValue);
-          const line = h("div", { class: "zn-fstyle-part" }, h("span", {}, partLabels[part]), input, hex, opacityRow, auto);
-          const setPart = (raw) => {
-            const value = cleanHex(raw.startsWith("#") || raw === "" ? raw : "#" + raw);
-            if (value) { parts[part] = value; syncAll(false, false, part); }
-          };
-          input.addEventListener("input", () => setPart(input.value));
-          hex.addEventListener("input", () => setPart(hex.value.trim()));
+          const line = h("div", { class: "zn-fstyle-part" }, h("span", {}, partLabels[part]), well.element, opacityRow, auto);
           alpha.addEventListener("input", () => {
             opacity[part] = Number(alpha.value);
             opacityValue.textContent = alpha.value + "%";
@@ -24573,7 +24770,7 @@
           });
           auto.addEventListener("click", () => { delete parts[part]; delete opacity[part]; syncAll(); });
           detail.append(line);
-          partInputs.set(part, { input, hex, opacity: alpha, opacityValue });
+          partInputs.set(part, { well, opacity: alpha, opacityValue });
         }
         function syncPreview() {
           const emoji = cleanFolderIcon(f.input.value.trim()) || "";
@@ -24591,15 +24788,14 @@
         function syncAll(skipPrimary = false, skipEdge = false, skipPart = "") {
           if (!skipPrimary) picker.sync(colorHex(color) || "#667788");
           const edge = parts.stroke || "";
-          if (!skipEdge) { edgeInput.value = edge || colorHex(color) || "#667788"; edgeHex.value = edge; }
+          if (!skipEdge) edgeWell.sync(edge || colorHex(color) || "#667788");
           edgeWarn.textContent = colorHex(color) && edge && FOLDER_STYLE.contrast(colorHex(color), edge) < 1.6 ? "Outline and folder colors are very close; the outline will be hard to see." : "";
           const a = opacity.back === undefined ? 100 : opacity.back;
           bodyAlpha.value = String(a);
           bodyAlphaValue.textContent = opacity.back === undefined ? "Auto" : a + "%";
           for (const [part, controls] of partInputs) {
             if (part === skipPart) continue;
-            controls.input.value = parts[part] || colorHex(color) || "#667788";
-            controls.hex.value = parts[part] || "";
+            controls.well.sync(parts[part] || colorHex(color) || "#667788");
             controls.opacity.value = String(opacity[part] === undefined ? 100 : opacity[part]);
             controls.opacityValue.textContent = opacity[part] === undefined ? "Auto" : opacity[part] + "%";
           }
@@ -24693,13 +24889,94 @@
       const quickColors = () => parseQuickColors(getPref(PREF.CUSTOM_COLORS, ""));
       const saveQuickColor = (hex) => setPref(PREF.CUSTOM_COLORS, addQuickColor(quickColors(), hex).join(","));
       const removeQuickColor = (hex) => setPref(PREF.CUSTOM_COLORS, quickColors().filter((c) => c !== hex).join(","));
-      // One reusable block: the system color picker, a #rrggbb field, "Save" and the quick colors. `onChange(hex)` fires on every valid change.
+      // OW-133: the in-app colour well. A native `input[type=color]` opens a platform colour dialog anchored to the
+      // input; when the sheet/panel it lives in is hidden (autohide) or its card is replaced, the dialog's grab
+      // outlives the control and the window stops taking input — and the composer's picked colour never came back
+      // through it at all. The well is a swatch that opens three HSL sliders, a #rrggbb field and the saved quick
+      // colours in place: the same pattern Settings already uses, no platform popup anywhere.
+      function colorWell(value, onChange, { label = "Colour", quick = true } = {}) {
+        let cur = cleanHex(value) || "#6aa7ff";
+        const swatch = h("button", { type: "button", class: "zn-color-well", "aria-label": label, title: label, "aria-expanded": "false" });
+        const body = h("div", { class: "zn-color-well-body" });
+        body.hidden = true;
+        const hue = h("input", { type: "range", min: "0", max: "359", step: "1", class: "zn-color-range", "aria-label": label + " hue" });
+        const sat = h("input", { type: "range", min: "0", max: "100", step: "1", class: "zn-color-range", "aria-label": label + " saturation" });
+        const lit = h("input", { type: "range", min: "0", max: "100", step: "1", class: "zn-color-range", "aria-label": label + " lightness" });
+        const hexField = h("input", { type: "text", class: "zn-field zn-hex-field", spellcheck: "false", maxlength: "7", placeholder: "#rrggbb", "aria-label": label + " as #rrggbb" });
+        const quickRow = h("div", { class: "zn-quick zn-flow" });
+        const paintQuick = () => {
+          quickRow.replaceChildren();
+          if (!quick) return;
+          for (const c of quickColors()) {
+            const b = h("button", { type: "button", class: "zn-swatch", title: c + " (right-click removes it)", "aria-label": "Quick color " + c });
+            setSheetColorData(b, c);
+            b.addEventListener("click", () => set(c));
+            b.addEventListener("contextmenu", (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              removeQuickColor(c);
+              paintQuick();
+            });
+            quickRow.append(b);
+          }
+        };
+        const hsl = () => hexToHsl(cur) || { h: 210, s: 80, l: 60 };
+        // `sync` never calls onChange: it repaints the controls from the value the caller decided on.
+        const sync = (hex) => {
+          const clean = cleanHex(hex);
+          if (clean) cur = clean;
+          swatch.style.backgroundColor = cur;
+          swatch.setAttribute("data-color", cur);
+          const h2 = hsl();
+          hue.value = String(h2.h);
+          sat.value = String(h2.s);
+          lit.value = String(h2.l);
+          sat.style.background = `linear-gradient(90deg, ${hslToHex(h2.h, 0, h2.l)}, ${hslToHex(h2.h, 100, h2.l)})`;
+          lit.style.background = `linear-gradient(90deg, #000, ${hslToHex(h2.h, h2.s, 50)}, #fff)`;
+          if (document.activeElement !== hexField) hexField.value = cur;
+          delete hexField.dataset.bad;
+          paintQuick();
+        };
+        const set = (hex) => {
+          const clean = cleanHex(hex);
+          if (!clean) return false;
+          sync(clean);
+          onChange(clean);
+          return true;
+        };
+        const fromSliders = () => set(hslToHex(Number(hue.value), Number(sat.value), Number(lit.value)));
+        for (const range of [hue, sat, lit]) range.addEventListener("input", fromSliders);
+        hexField.addEventListener("input", () => {
+          const raw = hexField.value.trim(), hex = cleanHex(raw.startsWith("#") ? raw : "#" + raw);
+          if (hex) set(hex);
+          else hexField.dataset.bad = "true";
+        });
+        body.append(
+          h("div", { class: "zn-color-well-row" }, hue, sat, lit),
+          h("div", { class: "zn-color-well-row" }, hexField),
+          ...(quick ? [quickRow] : []),
+        );
+        const element = h("div", { class: "zn-color-well-host" }, swatch, body);
+        // Open in place, full-width inside its row: the swatch stays put, the sliders appear under it. When it
+        // opens inside a row of other controls the host claims a whole line (`[data-open]` in the CSS) instead
+        // of squeezing the sliders into the swatch's 32px.
+        const setOpen = (open) => {
+          body.hidden = !open;
+          swatch.setAttribute("aria-expanded", open ? "true" : "false");
+          if (open) element.dataset.open = "true";
+          else delete element.dataset.open;
+        };
+        swatch.addEventListener("click", () => setOpen(body.hidden));
+        sync(cur);
+        return { element, value: () => cur, sync, open: () => setOpen(true), close: () => setOpen(false) };
+      }
+      // One reusable block: the in-app well, a #rrggbb field, "Save" and the quick colors. `onChange(hex)` fires on
+      // every valid change.
       function colorPicker(value, onChange) {
         let cur = cleanHex(value) || "#6aa7ff";
-        const native = h("input", { type: "color", class: "zn-color-input", "aria-label": "Pick a color", title: "Pick a color" });
-        native.value = cur;
-        const hexField = h("input", { type: "text", class: "zn-field zn-hex-field", spellcheck: "false", maxlength: "7", placeholder: "#rrggbb", "aria-label": "Color as #rrggbb" });
-        hexField.value = cur;
+        // The well owns the swatch, the HSL sliders and the #rrggbb field (OW-133): the platform dialog is gone, so a
+        // picked colour always reaches `onChange`, and no surface has to survive a popup it does not own.
+        const well = colorWell(cur, (hex) => set(hex), { label: "Pick a color", quick: false });
         const quick = h("div", { class: "zn-quick zn-flow" });
         const previewRem = h("span", { class: "zn-palette-preview-reminder zn-cal-item is-reminder is-compact" }, h("span", { class: "zn-cal-item-time" }, "09:00"), h("span", { class: "zn-cal-item-title" }, "Reminder"));
         const preview = h(
@@ -24717,9 +24994,7 @@
         };
         const set = (hex) => {
           cur = hex;
-          native.value = hex;
-          hexField.value = hex;
-          delete hexField.dataset.bad;
+          well.sync(hex);
           paintPreview();
           onChange(hex);
         };
@@ -24738,13 +25013,6 @@
             quick.append(b);
           }
         };
-        native.addEventListener("input", () => set(cleanHex(native.value) || cur));
-        hexField.addEventListener("input", () => {
-          const raw = hexField.value.trim();
-          const hex = cleanHex(raw.startsWith("#") ? raw : "#" + raw);
-          if (hex) set(hex);
-          else hexField.dataset.bad = "true";
-        });
         const keep = chip("Save as quick color");
         keep.addEventListener("click", () => {
           saveQuickColor(cur);
@@ -24752,9 +25020,10 @@
         });
         paintQuick();
         paintPreview();
-        const el = h("div", { class: "zn-color-picker" }, h("div", { class: "zn-color-picker-row" }, native, hexField, keep), quick, preview);
+        const el = h("div", { class: "zn-color-picker" }, h("div", { class: "zn-color-picker-row" }, well.element, keep), quick, preview);
         paletteRefreshers.add(() => {
           if (!el.isConnected) return false;
+          well.sync(cur);
           paintQuick();
           paintPreview();
           return true;
@@ -26865,9 +27134,20 @@
         } catch (_) {}
         return card;
       }
+      // The in-sheet fallback: no detached top layer, so the card moves and clips with the panel that owns it.
+      function constrainCalendarDialog() {
+        if (!dialog) return;
+        dialog.removeAttribute("popover");
+        delete dialog.dataset.calendarLayer;
+        dialog.dataset.calendarConstrained = "true";
+      }
       function openCalendarCard(label, ...kids) {
         const card = openCard(label, ...kids);
         if ((adapter.position !== "absolute" && !bigPicture) || !dialog) return card;
+        // OW-133: the card still promotes into its own top layer — that is what keeps it usable over Big Picture and
+        // over browser content. The platform-popup risk is answered below the card instead: every teardown that could
+        // take the sheet (and with it this card) away asks the hold first, and the panel's hover guard will not hide
+        // underneath an open popup. Constraining the card here would only hide it behind the layer it needs to beat.
         let raised = false;
         try {
           if (typeof dialog.showPopover === "function") {
@@ -26876,10 +27156,7 @@
             dialog.showPopover(); raised = true;
           }
         } catch (_) {}
-        if (!raised) {
-          dialog.removeAttribute("popover"); delete dialog.dataset.calendarLayer;
-          dialog.dataset.calendarConstrained = "true";
-        }
+        if (!raised) constrainCalendarDialog();
         fitCard();
         return card;
       }
@@ -30132,7 +30409,12 @@
           if (gesture) cancelGesture();
           setDatasetValue(root, "suspended", "true");
           if (bigPicture) closeCalendarBigPicture({ restoreFocus: false });
-          if (dialog?.dataset.calendarLayer === "true") closeDialog();
+          // OW-133: a suspended sheet hides its own content, but a card that owns an open platform popup is
+          // removed only after the popup reports back (the sheet stays invisible in the meantime).
+          if (dialog?.dataset.calendarLayer === "true") {
+            if (nativePopup.held()) deferTeardown(closeDialog);
+            else closeDialog();
+          }
           setStyleValue(root, "visibility", "hidden");
           setStyleValue(root, "pointerEvents", "none");
           setDatasetValue(root, "slot", "");
@@ -30639,11 +30921,29 @@
         revealEl.style.height = Math.round(band.height) + "px";
       }
       let panelWasHidden = false;
+      // OW-133: everything that is in the top layer (the calendar card, a menu) is positioned against the
+      // viewport, so the panel's own slide-away does not move or clip it. It must therefore never outlive a
+      // hidden parent panel, whatever the autohide trigger is: a leftover card is visible over the page with a
+      // dead panel behind it, and its own popover keeps whatever grab it holds.
+      function closeTopLayerForParentPanel() {
+        if (!dialog && !menu) return;
+        if (nativePopup.held()) return deferTeardown(closeTopLayerForParentPanel);
+        for (const step of [closeMenu, closeDialog]) {
+          try {
+            step();
+          } catch (error) {
+            warn(error);
+          }
+        }
+      }
       // Pointer-away autohide for a panel-hosted sheet belongs to the parent panel. The sheet must
       // fold at the same time as that panel, but must NOT create its own edge/reveal strip: the
       // panel already has the one and only target that brings this host back.
       function foldWithParentPanel() {
         if (!isOpen || destroyed || foldedByParentPanel) return;
+        // A platform picker/dropdown is anchored to a control in this sheet: folding (and so removing the
+        // card) now would leave its grab behind. The fold is replayed when the popup reports back.
+        if (nativePopup.held()) return deferTeardown(foldWithParentPanel);
         foldedByParentPanel = true;
         collapsed = true;
         collapsedAt = Date.now();
@@ -30654,8 +30954,15 @@
         graceTimer = 0;
         window.clearTimeout(openTimer);
         openTimer = 0;
-        closeMenu();
-        closeDialog();
+        // A failure in one teardown step must never leave the collapsed state half-applied: that is what used
+        // to keep a top-layer card over a panel that was already gone.
+        for (const step of [closeMenu, closeDialog]) {
+          try {
+            step();
+          } catch (error) {
+            warn(error);
+          }
+        }
         drop();
         try {
           if (root.contains(document.activeElement)) document.activeElement.blur();
@@ -30692,7 +30999,8 @@
         if (!adapter.pushPanel) return;
         const parentHidden = !!adapter.panelHidden?.();
         if (parentHidden && hideTrigger() === "leave") foldWithParentPanel();
-        else if (!parentHidden) restoreFromParentPanel();
+        else if (parentHidden) closeTopLayerForParentPanel();
+        else restoreFromParentPanel();
       }
       function watchParentPanelHidden() {
         if (!adapter.pushPanel || panelHiddenObserver || typeof MutationObserver !== "function") return;
@@ -30754,14 +31062,21 @@
         if (collapsed || !isOpen || destroyed || !hoverMode()) return;
         // The parent panel owns pointer-away autohide for panel-hosted Notes.
         if (adapter.pushPanel && hideTrigger() === "leave") return;
+        // OW-133: same rule as the panel fold — a card that owns an open platform popup is not torn down.
+        if (nativePopup.held()) return deferTeardown(collapse);
         collapsed = true;
         collapsedAt = Date.now();
         openedByHover = false;
         window.clearTimeout(graceTimer);
         graceTimer = 0;
         closeCalendarBigPicture({ restoreFocus: false });
-        closeMenu();
-        closeDialog();
+        for (const step of [closeMenu, closeDialog]) {
+          try {
+            step();
+          } catch (error) {
+            warn(error);
+          }
+        }
         drop();
         try {
           if (root.contains(document.activeElement)) document.activeElement.blur();
@@ -30869,6 +31184,9 @@
         if (!topLayer) return;
         const active = document.activeElement;
         if (active?.localName === "select" && root.contains(active)) return;
+        // OW-133: never hide the popover that owns an open platform popup (the same rule as the <select> above,
+        // now for every pickable control and for the panel's own share of the state).
+        if (nativePopup.held()) return;
         topLayer = false;
         try {
           if (root.matches(":popover-open")) root.hidePopover();
@@ -31118,6 +31436,10 @@
       }
       function close() {
         if (!isOpen) return;
+        // OW-133: a close that arrives while a platform picker/dropdown still owns this sheet (an outside press
+        // that races the picker, a reminder request taking the whole thing away) is replayed after it reports
+        // back. Destroying the module is exempt: there is no window left to protect then.
+        if (!destroying && nativePopup.held()) return deferTeardown(close);
         isOpen = false;
         cancelCalendarDrag();
         clearCalendarNoteDrop();
@@ -31136,8 +31458,13 @@
         cancelGesture();
         applyPush(0, 0);
         closeCalendarBigPicture({ restoreFocus: false });
-        closeMenu();
-        closeDialog();
+        for (const step of [closeMenu, closeDialog]) {
+          try {
+            step();
+          } catch (error) {
+            warn(error);
+          }
+        }
         flushReadCleanups();
         cancelAllAsync();
         const leavingId = registeredOpenNote || currentId;
@@ -31165,7 +31492,6 @@
         adapter.setActive(false);
         adapter.onClosed?.({ manual: !destroying });
       }
-      let destroying = false, unloadingClose = false;
       function destroy({ unloading = false } = {}) {
         if (destroyed) return;
         destroying = true;

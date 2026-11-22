@@ -285,11 +285,16 @@ async function test(name, fn) {
     assert.match(card.textContent, /Inherit \(quiet, loud, from category Work\)/);
     // OW-131: colour is now editable, not a read-only inheritance hint. The
     // override and Inherit control resolve against the same category layer.
-    const colorInput = card.querySelector(".zn-cal-compose-color-input");
+    // OW-133: the override is chosen in the in-app well, not in a native
+    // `input[type=color]` (its platform dialog lost the picked value and could
+    // outlive the card): the #rrggbb field inside the well is the fastest road.
+    const colorWellRow = card.querySelector(".zn-cal-compose-color-row");
+    const colorInput = colorWellRow?.querySelector(".zn-color-well-host .zn-hex-field");
     const colorInheritBtn = card.querySelector(".zn-cal-compose-color-inherit");
-    assert.ok(colorInput && colorInheritBtn, "the color input and Inherit control are present");
+    assert.ok(colorInput && colorInheritBtn, "the colour well and the Inherit control are present");
+    assert.equal(colorWellRow.querySelector("input[type=color]"), null, "no platform colour dialog in the composer");
     colorInput.value = "#ff0000";
-    colorInput.dispatchEvent(new Ev("change", { bubbles: true }));
+    colorInput.dispatchEvent(new Ev("input", { bubbles: true }));
     await flush();
     assert.match(colorLabel.textContent, /Custom item colour: #ff0000/);
     colorInheritBtn.dispatchEvent(new Ev("click", { bubbles: true }));

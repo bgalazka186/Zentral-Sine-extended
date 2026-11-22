@@ -135,6 +135,7 @@ Order = impact first (High to Low); inside the same impact the cheapest effort f
 |   141 | `OW-130`    | `DONE`    | Med                 | M      | —                 | All pill menus' `toggle panel autohide`: short click hides once even with autohide off, 550 ms hold toggles the saved preference; the pin button's exact click/hold recognizer is copied and standalone Notes uses the same hold-action pattern. Live gesture OWNER GATE |
 |   142 | `OW-131`    | `DONE`    | Med                 | M      | —                 | `create reminder...` view: color picker for reminder/event color, inherits category color but allows another color while keeping the category. Implemented statically as an item override; live composer OWNER GATE |
 |   143 | `OW-132`    | `DONE`    | Low                 | S      | OW-131            | DEMO notes must demo per-note/reminder colors so each demo entry can be colored on its own. Implemented statically with stable distinct installer colors; live Help-folder colors OWNER GATE |
+|   144 | `OW-133`    | `DONE`    | High                | M      | OW-131            | A platform picker (`input[type=color]`, `select`, date) opened in a Notes card must never outlive the card: the picked colour has to arrive and the window must keep taking clicks. Colour is chosen in one in-app well (HSL sliders + `#rrggbb` + quick colours); every involuntary teardown asks a bounded native-popup hold. Static/fake-DOM only; live colour pick and window-clicks OWNER GATE |
 
 
 ---
@@ -1079,6 +1080,69 @@ skips existing ids and never recolours an edited demo note.
 **Tests:** specification pinned; product RED/GREEN before implementation.
 OWNER GATE: live Help folder colors.
 
+#### `OW-133` — No platform popup may outlive its card (colour well)
+
+**Status:** `DONE` (static) · **Impact:** High · **Effort:** M · **Depends on:** `OW-131`
+
+**Problem (owner report, 2026-11-22):** two symptoms, one cause. Pressing the autohide edge
+while Notes held a native `<input type="color">` / `<select>` hid the sheet underneath a platform popup
+that is anchored to that control: the popup's grab stayed behind and the whole window stopped taking
+clicks. Independently, the composer's colour picker never delivered its value — a colour was picked and
+the item did not change.
+
+**Plan:**
+1. One in-app colour control, used everywhere a colour is chosen: a swatch that opens hue/saturation/
+   lightness sliders, a `#rrggbb` field and the saved quick colours in place. Nothing depends on a
+   platform dialog for a value any more.
+2. One bounded hold for the controls that still raise platform popups (`select`, date/time/file inputs,
+   datalist). While it is engaged every involuntary teardown (panel autohide, hover grace, outside press,
+   popover drop, suspended layout) is deferred, and `bgalazka-native-popup-open` is published so the
+   panel's own hover guard will not hide underneath the popup.
+3. Deferred work goes through one coalescing drain; each teardown step is isolated so a step that throws
+   cannot leave a collapsed sheet with a top-layer card over a hidden panel.
+
+**Implemented statically:**
+- `// <<OW-133 NATIVE POPUP HOLD>>` … `END` in `additional/notes/ZentralNotes.uc.js`:
+  `NATIVE_POPUP_CONTROL` selector, `nativePopupControl()`, `createNativePopupHold()` (bounded by
+  `NATIVE_POPUP_HOLD_MS`, refreshed by interaction, released by `change`/`popuphidden`/window focus/
+  an outside press, idempotent, one attribute write per state change) and `// <<OW-133 DEFERRED
+  TEARDOWN>>` `createDeferredTeardown()` (one timer, one drain, `alive()` gate, isolated steps).
+- The sheet instantiates one hold and one drain, and every teardown entry point asks the hold first:
+  `collapse()`, `foldWithParentPanel()`, `closeTopLayerForParentPanel()`, `close()` (exempt while the
+  module is being destroyed), `drop()`, and `layout()`'s suspended branch. `syncParentPanelHidden()`
+  now closes the top layer for **every** non-`leave` trigger, not only for the ones that used to be
+  listed. `closeMenu`/`closeDialog` run through one `try/catch` loop in each of them.
+- `extension/panels/interaction/ZentralPanelHover.js`: `hoverMenuVisible()` returns `true` while
+  `bgalazka-native-popup-open` is on `<html>`, so the panel does not slide away under an open popup.
+- `colorWell()` (in-app: swatch, HSL sliders, `#rrggbb`, quick colours, right-click removes a quick
+  colour) replaces every native `input[type=color]`: the calendar composer's item override, the shared
+  `colorPicker()` (folder style, note colour, category colour) and the folder editor's outline/part
+  colours. `zn-color-input` and `zn-cal-compose-color-input` are gone; `.zn-color-well*` styles are in
+  `ZentralNotes.css`.
+- The calendar card still promotes into its own top layer (it has to beat Big Picture); the risk is
+  answered below the card by the hold, not by constraining the card.
+
+**Tests (new, RED on the pre-fix tree):** `tests/ow-133-no-native-popups.test.cjs` (6 checks: source
+scan for every platform-popup control in every Notes file, the generated bundle, the hold-coverage rule
+for files that keep a picker, and the publisher/reader attribute agreement),
+`tests/ow-133-native-popup-hold.test.cjs` (13: the hold on its own, with a fake clock),
+`tests/ow-133-deferred-teardown.test.cjs` (18: the drain on its own, plus the guard ordering and the
+universal "anything that hides the sheet asks the hold" rule),
+`tests/ow-133-color-well.test.cjs` (16: the well's behaviour, the CSS/JS class pairing and the three
+surfaces that used the platform dialog). All four fail with `exit 1` against `e993fad` (the scan names
+the composer's native colour input; the other three cannot even extract the blocks). `tests/helpers/
+source-blocks.cjs` is the shared, string/template-aware extractor.
+
+**Chain:** `build-standalone --keep-version` (versions stay **3.4.3**, no authorized bump),
+`sync-version --check` → `All versions are 3.4.3`, `build-standalone --check` → up to date,
+`check-settings-consistency` → `catalog checks passed`, regenerated `docs/ow-114-pending-css-audit.md`
+and `z-heights_map.md` (`42/72/3`), `notes-undefined-identifiers` green, full suite
+`317/317 passed; 0 failed`.
+
+**OWNER GATE:** pick a colour in the composer and confirm it lands on the item; with a native picker or
+dropdown open in Notes, press the panel's autohide edge and confirm the window keeps taking clicks
+afterwards; confirm the folder-style and note-colour pickers still look right in light/dark.
+
 ---
 
 ## NEXT SESSION HANDOFF (version 3.4.3, edit in place, keep it short)
@@ -1086,6 +1150,8 @@ OWNER GATE: live Help folder colors.
 **Rule for every AI session: update State, Completed this session, Known debts, Next action and version here in place. Keep the project version at 3.4.3 unless the owner explicitly authorizes another change.**
 
 State: **3.4.3**. FOLLOW-UP 5 (C1) authorized **3.4.2** so Sine could deliver the Boost/Widgets split; OW-121's initial readability release advanced the shared version to **3.4.3**. The owner then reported the card was too white and roughly three times too tall: this correction uses the normal Widgets tertiary surface and neutral buttons, mirrors its existing background/text overrides, and places all four 24 px actions on one row at a 170 px sidebar (2×2 below 150 px of card content). Headless Chromium confirms that a 146 px host provides 130 px of card content, and an exact 146 px content width also uses the readable 2×2 fallback. The Boost standalone manifest borrows the two existing Widgets appearance settings. The prescribed build was inadvertently run with `--bump`, briefly advancing to 3.4.4 without owner authorization; that bump was corrected to 3.4.3 using `sync-version.cjs --set 3.4.3` and the standalone build with `--keep-version`. Generated bundles/locks, preferences and z-map are current, and all version markers are 3.4.3. The translated title, action IDs, Restore details, Game Mode state, toast, seating and no-Widgets-API ownership remain unchanged. `docs/boost-widget-preview.html` covers six widths/four themes and a custom override sample; the 146 px boundary has a headless Chromium layout check, not real-sidebar evidence. The broader 170 px preview and real-sidebar checks remain OWNER GATES, as do earlier W1–W7 and Notes/Restore checks. No live Zen/Sine visual or performance result is claimed. The pill pin button's click/hold behavior and standalone Notes card gesture remain unchanged.
+
+**`OW-133` (2026-11-22, owner report).** Two symptoms, one cause: with a native picker (`input[type=color]`, `select`, date) open inside Notes, the panel's autohide hid the sheet underneath a platform popup anchored to that control, so the popup's grab outlived it and the window ignored every click; and the composer's colour picker never returned its value. Colour is now chosen in one in-app well (`colorWell`: swatch, HSL sliders, `#rrggbb`, quick colours) in the composer, the shared `colorPicker()` and the folder editor — no `input[type=color]` is created anywhere in the Notes sources (a repo-wide scan proves it, including the generated standalone bundle). The controls that can still raise a platform popup are covered by a bounded hold (`<<OW-133 NATIVE POPUP HOLD>>`) that every involuntary teardown asks first (`collapse`, `foldWithParentPanel`, `closeTopLayerForParentPanel`, `close` — exempt only while the module is destroyed — `drop`, and `layout`'s suspended branch) and that publishes `bgalazka-native-popup-open`, which `ZentralPanelHover.hoverMenuVisible()` now honours. Deferred work drains once, in order, with each step isolated. `syncParentPanelHidden()` closes the top layer for every non-`leave` trigger. The calendar card still promotes into its own top layer (it must beat Big Picture); the hold, not a constrained card, answers the risk. Four new suites (`ow-133-no-native-popups` 6, `ow-133-native-popup-hold` 13, `ow-133-deferred-teardown` 18, `ow-133-color-well` 16) are RED (exit 1) on `e993fad` and green here; the full suite is `317/317 passed; 0 failed`, the CSS audit and z-map are regenerated, and every version marker stays **3.4.3** (`--keep-version`; no bump was authorized). OWNER GATE: pick a colour in the composer and confirm it lands on the item, and press the autohide edge with a native picker open to confirm the window keeps taking clicks.
 
 Completed this session: matched Boost's default colors to normal Widgets cards, added scoped live color-override mirroring, reduced the 170 px action layout to one row, updated the preview/tests/docs, restored the owner-pinned 3.4.3 version through repository tooling and passed the docs-inclusive full suite `313/313 test files; 0 failed; 0 TODO failures`. The preview and real-sidebar visual checks remain open for owner evidence.
 
