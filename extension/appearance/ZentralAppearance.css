@@ -1662,13 +1662,19 @@
 }
 :root[bgalazka-look="atelier"]
   #zentral-settings-modal#zentral-settings-modal
-  #zs-btn-capture-log[data-ui-status="danger"] {
+  #zs-btn-capture-log[data-ui-status="danger"],
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  #zs-btn-copy-diagnostics[data-ui-status="danger"] {
   background: var(--zl-danger) !important;
   color: var(--zl-danger-text) !important;
 }
 :root[bgalazka-look="atelier"]
   #zentral-settings-modal#zentral-settings-modal
-  #zs-btn-capture-log[data-ui-status="success"] {
+  #zs-btn-capture-log[data-ui-status="success"],
+:root[bgalazka-look="atelier"]
+  #zentral-settings-modal#zentral-settings-modal
+  #zs-btn-copy-diagnostics[data-ui-status="success"] {
   background: var(--zl-success) !important;
   color: var(--zl-success-text) !important;
 }

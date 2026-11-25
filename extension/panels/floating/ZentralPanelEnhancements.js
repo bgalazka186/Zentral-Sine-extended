@@ -96,10 +96,20 @@
         saved[host.key] = structuredClone(host.layout);
         saving = true;
         try {
-          Core.setPref(
-            storeKey,
-            JSON.stringify({ version: 1, entries: saved }),
+          // Two decimals are far below a pixel; full-precision floats made this pref pass the ~4 KB size at which
+          // Firefox warns ("attempting to write N bytes to preference ... bad for general performance").
+          const text = JSON.stringify(
+            { version: 1, entries: saved },
+            (_key, value) =>
+              typeof value === "number" && !Number.isInteger(value)
+                ? Math.round(value * 100) / 100
+                : value,
           );
+          if (text.length > 4000)
+            console.warn(
+              "[Zentral] placements pref is " + text.length + " bytes (" + Object.keys(saved).length + " entries); consider a smaller position scope",
+            );
+          Core.setPref(storeKey, text);
         } finally {
           saving = false;
         }

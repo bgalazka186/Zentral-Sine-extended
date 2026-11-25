@@ -265,7 +265,7 @@
                   browser.docShellIsActive &&
                   (!browser.isRemoteBrowser || browser.renderLayers)),
             );
-        });
+        }, { minAttempts: 8 }); // a cold start or a just-revealed panel needs seconds, not the default two tries
       };
       return {
         ensureNativeAudioButton,

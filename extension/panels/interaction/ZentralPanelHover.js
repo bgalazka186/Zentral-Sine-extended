@@ -572,11 +572,13 @@
               gBrowser.selectedBrowser?.focus();
             ctx.syncAppPanelBrowserActivity?.();
           } else {
-            if (autohideEnabled) {
-              apps?.startPositionTracking?.();
-              ctx.requestPanelActivity?.();
-            }
+            if (autohideEnabled) apps?.startPositionTracking?.();
+            // Every reveal wakes the panel's pages, not only a reveal under the saved autohide preference: a panel
+            // that a one-shot hide slid away (or whose preference was switched off meanwhile) used to come back with
+            // its pages still inactive and unpainted. The sleep-bug family: a revealed panel showed no web content.
+            ctx.requestPanelActivity?.();
             ctx.scheduleSecondaryGeometryFit?.();
+            ctx.healSecondaryPanel?.();
           }
           syncPanelFallbackPolling();
         }

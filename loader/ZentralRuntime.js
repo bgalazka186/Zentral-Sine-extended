@@ -1085,6 +1085,50 @@
   // its first use, which is the runtime literal immediately below.
   const performanceSwitch = createPerformanceSwitch();
 
+  // ---- support report ("Copy diagnostics" in Settings > Logs & Diagnostics) ---------------------------------------
+  // Always on and tiny (a ring of 100 short notes), unlike the console logger, which is off unless switched on:
+  // a fault that already happened can still be reported. Features add a note when they recover from something or
+  // give up (`runtime.noteDiagnostic`) and a reporter that prints their live state when the report is made.
+  const DIAGNOSTIC_NOTE_LIMIT = 100;
+  const diagnosticNotes = [];
+  const diagnosticReporters = new Map();
+  // A report is pasted into chats and issues: page addresses are cut back to their site, so it never carries a
+  // path, a query or an id.
+  const redactAddresses = (text) =>
+    String(text).replace(/\b(https?|moz-extension|file):\/\/[^\s"'<>)\]}]+/gi, (match) => {
+      try {
+        const url = new URL(match);
+        return url.protocol === "file:" ? "file://(path hidden)" : url.origin + "/…";
+      } catch (_) {
+        return "(address hidden)";
+      }
+    });
+  const diagnosticData = (data) => {
+    if (data === undefined || data === null) return "";
+    try {
+      return redactAddresses(typeof data === "string" ? data : JSON.stringify(data)).slice(0, 700);
+    } catch (_) {
+      return "(unprintable)";
+    }
+  };
+  function noteDiagnostic(tag, message, data) {
+    diagnosticNotes.push({
+      at: new Date().toISOString(),
+      tag: String(tag || "Zentral").slice(0, 60),
+      message: redactAddresses(message ?? "").slice(0, 300),
+      data: diagnosticData(data),
+    });
+    if (diagnosticNotes.length > DIAGNOSTIC_NOTE_LIMIT)
+      diagnosticNotes.splice(0, diagnosticNotes.length - DIAGNOSTIC_NOTE_LIMIT);
+  }
+  function registerDiagnosticReporter(name, fn) {
+    if (!name || typeof fn !== "function") return () => {};
+    diagnosticReporters.set(String(name), fn);
+    return () => {
+      if (diagnosticReporters.get(String(name)) === fn) diagnosticReporters.delete(String(name));
+    };
+  }
+
   const runtime = (window.ZentralRuntime = {
     version: VERSION,
     rootURI: ROOT,
@@ -1271,6 +1315,50 @@
         },
       );
       return dispose;
+    },
+    noteDiagnostic,
+    registerDiagnosticReporter,
+    // The text a person pastes when something looks wrong: versions, start-up stage, what each file did, the
+    // recent notes and every feature's live state. Never throws: a broken reporter is itself reported.
+    diagnosticsReport() {
+      const lines = [];
+      const add = (...parts) => lines.push(parts.join(""));
+      let app = "";
+      try {
+        app = Services.appinfo.name + " " + Services.appinfo.version + " (" + Services.appinfo.OS + ")";
+      } catch (_) {}
+      add("Zentral ", VERSION, " diagnostics · ", new Date().toISOString());
+      if (app) add("Browser: ", app);
+      add("Start-up stage: ", startupStage, activationReady ? " (ready)" : " (not ready)");
+      const warnings = runtime.nativeReadinessWarnings || [];
+      if (warnings.length) add("Native start-up warnings: ", warnings.map(diagnosticData).join("; "));
+      add("");
+      add("== Files ==");
+      for (const r of records.values())
+        add(r.id, ": ", r.state || "?", enabled(r.id) ? "" : " (switched off)", r.error ? " · " + diagnosticData(String(r.error?.message || r.error)) : "");
+      add("");
+      add("== Recent notes (newest last, at most ", DIAGNOSTIC_NOTE_LIMIT, ") ==");
+      if (!diagnosticNotes.length) add("(none)");
+      for (const n of diagnosticNotes) add(n.at, " [", n.tag, "] ", n.message, n.data ? " " + n.data : "");
+      for (const [name, fn] of diagnosticReporters) {
+        add("");
+        add("== ", name, " ==");
+        try {
+          const out = fn();
+          add(typeof out === "string" ? redactAddresses(out) : diagnosticData(out));
+        } catch (error) {
+          add("(reporter failed: ", diagnosticData(String(error?.message || error)), ")");
+          console.warn("[Zentral] Diagnostics reporter failed:", name, error);
+        }
+      }
+      return lines.join("\n");
+    },
+    copyDiagnostics() {
+      const text = runtime.diagnosticsReport();
+      Components.classes["@mozilla.org/widget/clipboardhelper;1"]
+        .getService(Components.interfaces.nsIClipboardHelper)
+        .copyString(text);
+      return text;
     },
     snapshot() {
       return {

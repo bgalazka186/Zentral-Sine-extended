@@ -11,7 +11,7 @@ const root = path.resolve(__dirname, "..", "..");
 const widgetSrc = fs.readFileSync(path.join(root, "additional/widgets/ZentralWidgets.uc.js"), "utf8");
 const widgetCss = fs.readFileSync(path.join(root, "additional/widgets/ZentralWidgets.css"), "utf8");
 
-function createFakeSidebarHarness(initialPrefs = {}, { fetch: fetchImpl = null, notes = false } = {}) {
+function createFakeSidebarHarness(initialPrefs = {}, { fetch: fetchImpl = null, notes = false, console: consoleImpl = null } = {}) {
   const prefs = new Map(Object.entries(initialPrefs));
   const prefObservers = [];
   let nowMs = 1_700_000_000_000;
@@ -435,7 +435,7 @@ function createFakeSidebarHarness(initialPrefs = {}, { fetch: fetchImpl = null, 
     document,
     Services,
     Date: FakeDate,
-    console: { log() {}, warn() {}, error() {} },
+    console: consoleImpl || { log() {}, warn() {}, error() {} },
     MutationObserver: FakeMutationObserver,
     ResizeObserver: FakeResizeObserver,
     setTimeout: window.setTimeout,

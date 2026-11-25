@@ -30574,7 +30574,6 @@ __zentralShim.register = function (def) {
       chevron: "m9 6 6 6-6 6",
       chevronLeft: "m15 6-6 6 6 6",
       chevronRight: "m9 6 6 6-6 6",
-      sliders: "M4 6h16 M7 12h10 M10 18h4",
       columns: "M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M12 3v18",
       image: "M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z M21 15l-5-5L5 21",
       rule: "M4 12h16",
@@ -45994,11 +45993,17 @@ __zentralShim.register = function (def) {
           };
           window.addEventListener("resize", cb);
           document.addEventListener("zentral-triple-swapped", swapped);
+          // The panel suite says its pages have their final size (a start-up built them while the panel was still
+          // settling): the band was sized from what was measured then, so it is measured and sized again. A band
+          // whose edge was dragged keeps its split (keptGapUp); an untouched one is centred on the divider, which
+          // is the 30 / 40 / 30 a Notes band opens with.
+          document.addEventListener("zentral-triple-settled", cb);
           return () => {
             ro.disconnect();
             observeAll = () => {};
             window.removeEventListener("resize", cb);
             document.removeEventListener("zentral-triple-swapped", swapped);
+            document.removeEventListener("zentral-triple-settled", cb);
           };
         },
         rewatch: () => observeAll(),

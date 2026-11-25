@@ -276,10 +276,17 @@
           panelRetryJobs.delete(key);
           armPanelRetries();
         };
-        ctx.retryPanelTask = (key, task) => {
+        // `minAttempts` (optional) lets a caller whose work really needs a cold start to finish (a second Triple
+        // View browser, the activity of a revealed panel) ask for more tries than the global limit. The limit stays
+        // the default (and a limit of 0 still turns retries off); the extra tries are capped at 12.
+        ctx.retryPanelTask = (key, task, { minAttempts = 0 } = {}) => {
           ctx.cancelPanelRetry(key);
           const done = safeCall(task, "panel task") !== false;
-          const { attempts, delay } = panelRetryOptions();
+          const options = panelRetryOptions();
+          const { delay } = options;
+          const attempts = options.attempts
+            ? Math.max(options.attempts, Math.min(12, Math.trunc(Number(minAttempts) || 0)))
+            : 0;
           if (!done && attempts && !isDisposed()) {
             panelRetryJobs.set(key, {
               task,
@@ -3730,7 +3737,21 @@
             (selection.mode !== "triple" ||
               document.documentElement.getAttribute("bgalazka-triple-view") ===
                 "true");
-          if (opened) setTimeout(onHoverRootLeave, 1200);
+          if (opened) {
+            // The panel slides away 1.2 s after it opened, but not before a Triple View's lower page has its
+            // content (at most 6 s more): a page that was still blank when the panel hid came back empty.
+            let waited = 0;
+            const hideWhenReady = () => {
+              if (startupCancelled || extensionDisposed) return;
+              if (waited >= 6000 || ctx.secondaryContentReady?.() !== false) {
+                onHoverRootLeave();
+                return;
+              }
+              waited += 400;
+              setTimeout(hideWhenReady, 400);
+            };
+            setTimeout(hideWhenReady, 1200);
+          }
           return opened;
         };
         const tryStartupPanel = () => {

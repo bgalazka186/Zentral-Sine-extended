@@ -4960,7 +4960,11 @@ function nativeSidebarSide() {
             });
           }
         }
-        syncWidgetsAndLayout();
+        // While the built-in widgets are being registered one after another (start-up), nothing is mounted: the
+        // single sync after the last of them does it, once everything the widgets read exists. Before, each
+        // registration synced (and so tried to create) every widget registered so far: the clock was created three
+        // times before it could work.
+        if (!bootRegistering) syncWidgetsAndLayout();
         return true;
       }
 
@@ -5150,6 +5154,12 @@ function nativeSidebarSide() {
           refreshMinutes: cleanRefreshMinutes(getInt(WIDGET_PREFS.WEATHER_REFRESH_MINUTES, DEFAULTS.WEATHER_REFRESH_MINUTES)),
         };
       }
+
+      // The clock widget's create() reads timerState, and every registerWidget call below re-syncs (and so creates)
+      // the widgets registered so far. Declared further down, it was still in its temporal dead zone for the
+      // first of those syncs: "can't access lexical declaration 'timerState' before initialization".
+      var bootRegistering = true; // var: registerWidget is hoisted and may be reached before this line
+      const timerState = { stopwatch: stopwatchReset(), timer: timerReset(), lapsOpen: false };
 
       registerWidget({
         id: "clock",
@@ -6378,7 +6388,7 @@ function nativeSidebarSide() {
       // ---- T3.9d: timer, stopwatch and quick note --------------------------------------------------------------
       // One card: a stopwatch and a countdown that share a single readout, five presets, one free field and a laps
       // list. Its state lives here (not in prefs): a stopwatch is a moment, not a setting.
-      const timerState = { stopwatch: stopwatchReset(), timer: timerReset(), lapsOpen: false };
+      // (timerState is declared before the first registerWidget call: see the note there.)
       // The Clock line's small badge; the timer panel writes into it so a running countdown survives a closed panel.
 
       // OW-56: the two halves of "a countdown that ends". Both are best-effort and silent on a platform that has
@@ -6578,6 +6588,7 @@ function nativeSidebarSide() {
         } catch (_) {}
       }
 
+      bootRegistering = false;
       syncWidgetsAndLayout();
 
       // OW-99: the calendar's read of the weather (see `weatherDays` below). Declared above the API object, because a

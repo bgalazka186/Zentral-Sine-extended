@@ -1371,6 +1371,14 @@
                   </div>
                   <button id="zs-btn-capture-log" class="zs-btn-save" style="margin: 0; padding: 6px 18px; font-size: 12.5px;">Export</button>
                 </div>
+
+                <div class="zs-row">
+                  <div class="zs-label-container">
+                    <span class="zs-label">Copy diagnostics</span>
+                    <span class="zs-sublabel">Copies a short report to the clipboard: versions, start-up stage, what each file did, recent problems and the live state of the panels. Works even when logging is off; page addresses are cut back to their site. Paste it when reporting a bug.</span>
+                  </div>
+                  <button id="zs-btn-copy-diagnostics" class="zs-btn-save" style="margin: 0; padding: 6px 18px; font-size: 12.5px;">Copy</button>
+                </div>
               </div>
 
               <!-- Report an Issue Section -->
@@ -2045,6 +2053,28 @@
                   delete captureBtn.dataset.uiStatus;
                   captureBtn.style.background = originalBg;
                   captureBtn.style.pointerEvents = "auto";
+                }
+              }, 2200);
+            });
+          }
+
+          const copyDiagnosticsBtn = this.modal.querySelector(
+            "#zs-btn-copy-diagnostics",
+          );
+          if (copyDiagnosticsBtn) {
+            copyDiagnosticsBtn.addEventListener("click", () => {
+              let ok = false;
+              try {
+                ok = !!window.ZentralRuntime?.copyDiagnostics?.();
+              } catch (error) {
+                console.warn("[Zentral] Copy diagnostics failed", error);
+              }
+              copyDiagnosticsBtn.textContent = ok ? "✓ Copied!" : "⚠️ Failed";
+              copyDiagnosticsBtn.dataset.uiStatus = ok ? "success" : "danger";
+              setTimeout(() => {
+                if (this.modal && copyDiagnosticsBtn) {
+                  copyDiagnosticsBtn.textContent = "Copy";
+                  delete copyDiagnosticsBtn.dataset.uiStatus;
                 }
               }, 2200);
             });

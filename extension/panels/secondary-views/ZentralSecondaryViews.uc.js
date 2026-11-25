@@ -9,8 +9,8 @@
  *   views; required extended-panel internals still need the coordinator and Apps.
  * Registration: secondary-views
  * Loaded/created by: loader/ZentralCatalog.js
- * Contract fields assigned here: ctx.openStartupSinglePanel; ctx.recreateLoadedPanels;
- *   ctx.syncSecondaryFallbackPolling; ctx.syncSecondaryToolbarPreferences; ctx.updateSecondaryFallbackState
+ * Contract fields assigned here: ctx.healSecondaryPanel; ctx.openStartupSinglePanel; ctx.recreateLoadedPanels;
+ *   ctx.scheduleSecondaryGeometryFit; ctx.secondaryContentReady; ctx.syncSecondaryFallbackPolling; ctx.syncSecondaryToolbarPreferences; ctx.updateSecondaryFallbackState
  * Literal DOM event subscriptions: blur; click; keydown; lostpointercapture; pointercancel; pointerdown;
  *   pointermove; pointerup
  *
@@ -212,6 +212,7 @@
           return false;
         }
         state.pair = pair;
+        scheduleSecondaryHeal({ fresh: true });
         return true;
       }
       function swapPair() {
@@ -427,6 +428,177 @@
       }
       ctx.scheduleSecondaryGeometryFit = scheduleSecondaryGeometryFit;
 
+      // ---- a cold or sleeping second panel heals itself --------------------------------------------------
+      // Two long-standing faults had one shape: the lower page of a Triple View that a start-up (or a reveal of an
+      // autohidden panel) built while the panel was still settling stayed empty until "Swap top and bottom panels"
+      // rebuilt its shell. The swap helped because it ran every step again once the panel was laid out. The same
+      // steps are now taken by the panel itself, when it is on screen, a few times while the start-up settles and
+      // at every reveal: publish the split, un-hide both pages, load a page that is still blank, and wake both
+      // pages. Each step only acts when it finds something wrong, so a healthy pair is left exactly as it is.
+      // var, not const/let: a start-up restore may reach discardSecond before these lines have run (see secondaryFitFrame).
+      var HEAL_DELAYS_MS = [350, 1200, 3000, 7000];
+      var HEAL_MAX_RELOADS = 3;
+      var healReloads = new WeakMap();
+      var healTimers = [];
+      var healSettledPending = false;
+      const panelOnScreen = () =>
+        !!isOpen() &&
+        !ui.hasAttribute("bgalazka-hover-panel-hidden") &&
+        document.visibilityState !== "hidden";
+      const isBlankSpec = (spec) => !spec || spec === "about:blank";
+      // A page counts as blank only when every place that knows what it shows says so: a browser that a tab hosts
+      // can report about:blank as its current URI while the page it shows has a document URI and a title.
+      const isBlankPage = (browser) =>
+        isBlankSpec(browser?.currentURI?.spec) &&
+        isBlankSpec(browser?.documentURI?.spec) &&
+        !browser?.contentTitle;
+      // Every recovery step and every give-up goes to the console AND to the support report (Settings > Logs &
+      // Diagnostics > Copy diagnostics), which works even when the console logger is off.
+      function noteHeal(message, data) {
+        console.warn("[Zentral] " + message, data ?? "");
+        try {
+          window.ZentralRuntime?.noteDiagnostic?.("Triple View", message, data);
+        } catch (_) {}
+      }
+      const describeBrowser = (b) =>
+        b
+          ? {
+              app: b._bgalazkaAppId,
+              url: b.currentURI?.spec,
+              documentURI: b.documentURI?.spec,
+              title: b.contentTitle,
+              pending: b.hasAttribute?.("pending") || false,
+              remote: b.isRemoteBrowser,
+              hasWindowGlobal: !!b.browsingContext?.currentWindowGlobal,
+              height: Math.round(b.getBoundingClientRect?.().height || 0),
+              docShellIsActive: b.docShellIsActive,
+              loading: !!b.webProgress?.isLoadingDocument,
+              reloads: healReloads.get(b) || 0,
+            }
+          : null;
+      const unregisterPanelReporter = window.ZentralRuntime?.registerDiagnosticReporter?.(
+        "Panels · Triple View",
+        () => {
+          const slot = slider();
+          return JSON.stringify(
+            {
+              mode: state.mode,
+              open: !!isOpen(),
+              autohidden: ui.hasAttribute("bgalazka-hover-panel-hidden"),
+              share: state.share,
+              topShare: slot?.style.getPropertyValue("--bgalazka-top-share") || null,
+              bottomShare: slot?.style.getPropertyValue("--bgalazka-bottom-share") || null,
+              settlePending: healSettledPending,
+              upper: describeBrowser(state.first),
+              lower: describeBrowser(state.second),
+            },
+            null,
+            2,
+          );
+        },
+      );
+      ctx.registerCleanup(() => unregisterPanelReporter?.());
+      function secondaryLoadTarget(browser) {
+        const id = browser?._bgalazkaAppId;
+        const url =
+          browser?._bgalazkaSuperPinReturnURL ||
+          state.secondURL ||
+          (id && state.pair?.apps?.[id]?.url) ||
+          "";
+        return url && url !== "about:blank" ? url : "";
+      }
+      // Returns true when the pair is healthy (both pages laid out, the lower one has content and is awake).
+      function healSecondaryPanel() {
+        const second = state.second;
+        if (
+          state.mode !== "triple" ||
+          !second?.isConnected ||
+          !state.shell?.isConnected ||
+          !panelOnScreen()
+        )
+          return false;
+        try {
+          for (const browser of [state.first, second]) {
+            if (!browser?.isConnected) continue;
+            if (browser.hidden) browser.hidden = false;
+            browser.removeAttribute?.("hidden");
+            if (browser.style.display === "none") browser.style.display = "";
+          }
+          fitSecondaryBrowsers();
+          const panel = slider();
+          const split =
+            !!panel?.style.getPropertyValue("--bgalazka-top-share") &&
+            !!panel?.style.getPropertyValue("--bgalazka-bottom-share");
+          if (isBlankPage(second) && !second.webProgress?.isLoadingDocument) {
+            const target = secondaryLoadTarget(second);
+            const used = healReloads.get(second) || 0;
+            if (target && used < HEAL_MAX_RELOADS) {
+              healReloads.set(second, used + 1);
+              noteHeal("lower panel was blank; loading it again (" + (used + 1) + "/" + HEAL_MAX_RELOADS + ")", target);
+              navigate(second, target);
+            } else if (target) {
+              noteHeal("lower panel is still blank; reload limit reached", target);
+            }
+          }
+          ctx.requestPanelActivity?.();
+          if (ctx.zenCssEnabled?.()) refreshViewZenCss(second);
+          const laidOut = second.getBoundingClientRect().height > 0;
+          const hasPage =
+            !isBlankPage(second) && !!second.browsingContext?.currentWindowGlobal;
+          return split && laidOut && hasPage;
+        } catch (error) {
+          console.warn("[BgalazkaExtension] Secondary panel recovery failed", error);
+          return false;
+        }
+      }
+      function cancelSecondaryHeal() {
+        for (const timer of healTimers) ctx.clearTimeout(timer);
+        healTimers = [];
+      }
+      // `settled` tells Notes (which sized its band from the pages it measured) that the pages now have their
+      // final size, so a band measured while they were still settling is measured again.
+      function announceTripleSettled() {
+        if (!healSettledPending) return;
+        healSettledPending = false;
+        try {
+          document.dispatchEvent(new Event("zentral-triple-settled"));
+        } catch (_) {}
+      }
+      function scheduleSecondaryHeal({ fresh = false } = {}) {
+        if (state.mode !== "triple") return;
+        if (fresh) healSettledPending = true;
+        cancelSecondaryHeal();
+        HEAL_DELAYS_MS.forEach((delay, index) => {
+          const timer = ctx.setTimeout(() => {
+            healTimers = healTimers.filter((t) => t !== timer);
+            if (state.mode !== "triple" || !state.second?.isConnected) return;
+            const healthy = healSecondaryPanel();
+            if (healthy && panelOnScreen()) announceTripleSettled();
+            if (healthy) cancelSecondaryHeal();
+            else if (index === HEAL_DELAYS_MS.length - 1 && panelOnScreen()) {
+              // Never fail quietly: say what the lower page looked like when recovery gave up.
+              noteHeal("lower panel is still not showing content after recovery", describeBrowser(state.second));
+            }
+          }, delay);
+          healTimers.push(timer);
+        });
+      }
+      ctx.healSecondaryPanel = () => {
+        if (state.mode !== "triple") return;
+        healSecondaryPanel();
+        scheduleSecondaryHeal();
+      };
+      // True when no second page is expected, or when it has content (a start-up may then let the panel slide away).
+      ctx.secondaryContentReady = () =>
+        state.mode !== "triple" ||
+        !state.second?.isConnected ||
+        (!isBlankPage(state.second) && !!state.second.browsingContext?.currentWindowGlobal);
+      ctx.registerCleanup(() => {
+        cancelSecondaryHeal();
+        delete ctx.healSecondaryPanel;
+        delete ctx.secondaryContentReady;
+      });
+
       // Resume can leave secondary geometry/activity stale without a resize.
       // Coalesce native lifecycle signals; one delayed pass covers restored layout.
       let resumeFrame = null;
@@ -509,6 +681,8 @@
         else parent.appendChild(browser);
       }
       function discardSecond() {
+        cancelSecondaryHeal();
+        healSettledPending = false;
         state.geometryObserver?.disconnect();
         state.geometryObserver = null;
         state.hoverObserver?.disconnect();
@@ -815,8 +989,10 @@
               : window.MutationObserver;
           if (HoverObserver) {
             state.hoverObserver = new HoverObserver(() => {
-              if (!ui.hasAttribute("bgalazka-hover-panel-hidden"))
+              if (!ui.hasAttribute("bgalazka-hover-panel-hidden")) {
                 scheduleSecondaryGeometryFit();
+                scheduleSecondaryHeal();
+              }
             });
             state.hoverObserver.observe(ui, {
               attributes: true,
@@ -1040,7 +1216,7 @@
           }
           refreshViewZenCss(browser);
           return !!url && url !== "about:blank";
-        });
+        }, { minAttempts: 12 });
         window.ZentralRuntime?.requestSidebarLayout?.();
         const refreshSecondaryToolbar = () => {
           if (state.second !== browser || !box.isConnected) return;
@@ -1145,7 +1321,10 @@
           linkCurrentPair(firstApp, app);
         }
         markTiles();
-        if (state.mode === "triple") scheduleSecondaryGeometryFit();
+        if (state.mode === "triple") {
+          scheduleSecondaryGeometryFit();
+          scheduleSecondaryHeal({ fresh: true });
+        }
         return true;
       }
       // Startup can request one panel even when it belongs to a saved Triple View pair.

@@ -1881,7 +1881,7 @@ function createCard({ root, mode }) {
       return runCleanAction(api, () => api.runLevel2());
     if (id === "game-mode" && typeof api.setGameMode === "function") {
       previewHint(root.querySelector?.('[data-zbw-action="game-mode"]'));
-      const next = !Boolean(api.gameModeState?.()?.on);
+      const next = !api.gameModeState?.()?.on;
       const eventsBefore = gameModeEventCount;
       let result = null;
       try { result = api.setGameMode(next); } catch (_) { result = null; }
