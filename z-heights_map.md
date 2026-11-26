@@ -127,8 +127,8 @@ Ordering inside one component. Listed by file; values only matter relative to si
 | extension/panels/browsers/ZentralBrowserIntegrations.css | 705 | 3 | `:root[bgalazka-super-pin="true"] .bgalazka-second-resize` |
 | extension/panels/geometry/ZentralPanelGeometry.css | 43 | 30 | `.zen-app-resize-strip-top, .zen-app-resize-strip-bottom` |
 | extension/panels/geometry/ZentralPanelGeometry.css | 141 | 31 | `.zen-app-resize-strip-outer, .zen-app-resize-strip-inner, .zen-app-resize-corner` |
-| extension/panels/navigation/styles/ZentralPanelToolbar.css | 214 | 5 | `:root[bgalazka-webtoolbar-autohide="true"] #zen-app-panel-toolbar` |
-| extension/panels/navigation/styles/ZentralPanelToolbar.css | 231 | 4 | `:root[bgalazka-webtoolbar-autohide="true"] .zen-toolbar-hover-zone` |
+| extension/panels/navigation/styles/ZentralPanelToolbar.css | 234 | 5 | `:root[bgalazka-webtoolbar-autohide="true"] #zen-app-panel-toolbar` |
+| extension/panels/navigation/styles/ZentralPanelToolbar.css | 251 | 4 | `:root[bgalazka-webtoolbar-autohide="true"] .zen-toolbar-hover-zone` |
 | extension/panels/ZentralPanels.css | 368 | 30 | `:root[bgalazka-opposite-docking="true"] #zen-app-panel-root[data-panel-side="right"] .zen-app-resize-strip` |
 | extension/panels/ZentralPanels.css | 484 | 30 | `:root[bgalazka-opposite-docking="true"] #zen-app-panel-root[data-panel-side="left"] .zen-app-resize-strip` |
 | extension/settings/styles/ZentralSettingsFoundation.css | 359 | 10 | `#zentral-settings-modal #zs-panel-bgalazka .zs-section-header` |

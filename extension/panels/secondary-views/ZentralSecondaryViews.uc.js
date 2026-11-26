@@ -455,6 +455,7 @@
       // Every recovery step and every give-up goes to the console AND to the support report (Settings > Logs &
       // Diagnostics > Copy diagnostics), which works even when the console logger is off.
       function noteHeal(message, data) {
+        syncSecondaryHealthDot();
         console.warn("[Zentral] " + message, data ?? "");
         try {
           window.ZentralRuntime?.noteDiagnostic?.("Triple View", message, data);
@@ -542,6 +543,7 @@
           }
           ctx.requestPanelActivity?.();
           if (ctx.zenCssEnabled?.()) refreshViewZenCss(second);
+          syncSecondaryHealthDot();
           const laidOut = second.getBoundingClientRect().height > 0;
           const hasPage =
             !isBlankPage(second) && !!second.browsingContext?.currentWindowGlobal;
@@ -583,6 +585,14 @@
           healTimers.push(timer);
         });
       }
+      ctx.panelHealReloads = (browser) => healReloads.get(browser) || 0;
+      // Refreshes the dot of the lower bar. Called by the main toolbar's poll, every recovery pass, every reveal.
+      function syncSecondaryHealthDot() {
+        try {
+          if (state.shell?.isConnected && state.second) ctx.syncHealthDot?.(state.shell, state.second);
+        } catch (_) {}
+      }
+      ctx.syncSecondaryHealthDot = syncSecondaryHealthDot;
       ctx.healSecondaryPanel = () => {
         if (state.mode !== "triple") return;
         healSecondaryPanel();
@@ -596,6 +606,8 @@
       ctx.registerCleanup(() => {
         cancelSecondaryHeal();
         delete ctx.healSecondaryPanel;
+        delete ctx.panelHealReloads;
+        delete ctx.syncSecondaryHealthDot;
         delete ctx.secondaryContentReady;
       });
 
@@ -873,7 +885,29 @@
             url.blur();
           } else if (event.key === "Escape") url.blur();
         });
-        bar.append(grip, url);
+        // Health dot at the edge of the URL field (same dot as the main panel's bar; see panelHealth() in
+        // ZentralPanelToolbar.uc.js). Hidden while the lower page is fine.
+        const healthDot = document.createElement("span");
+        healthDot.className = "zen-toolbar-health-dot bgalazka-second-health-dot";
+        healthDot.hidden = true;
+        healthDot.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (state.second?.isConnected) {
+            ctx.reloadPanelFromDot?.(state.second);
+            window.setTimeout(() => ctx.syncSecondaryHealthDot?.(), 400);
+          }
+        });
+        healthDot.addEventListener("contextmenu", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          try {
+            window.ZentralRuntime?.copyDiagnostics?.();
+          } catch (error) {
+            console.warn("[Zentral] Copy diagnostics failed", error);
+          }
+        });
+        bar.append(grip, url, healthDot);
         iconButton(ctx.PREF_ICONS.ZOOM_OUT, "Zoom out", () =>
           zoom(-0.1),
         ).classList.add("bgalazka-second-zoom");
@@ -992,6 +1026,7 @@
               if (!ui.hasAttribute("bgalazka-hover-panel-hidden")) {
                 scheduleSecondaryGeometryFit();
                 scheduleSecondaryHeal();
+                syncSecondaryHealthDot();
               }
             });
             state.hoverObserver.observe(ui, {

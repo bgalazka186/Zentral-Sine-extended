@@ -158,6 +158,26 @@
     transparent
   ) !important;
 }
+.zen-toolbar-health-dot {
+  flex-shrink: 0 !important;
+  width: 9px !important;
+  height: 9px !important;
+  margin: 0 3px !important;
+  border-radius: 50% !important;
+  cursor: pointer !important;
+  background: #f59e0b !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 18%, transparent) !important;
+}
+.zen-toolbar-health-dot[hidden] {
+  display: none !important;
+}
+.zen-toolbar-health-dot[data-state="blank"],
+.zen-toolbar-health-dot[data-state="failed"] {
+  background: #ef4444 !important;
+}
+.zen-toolbar-health-dot[data-state="asleep"] {
+  background: #94a3b8 !important;
+}
 .zen-toolbar-urlbar {
   width: 100%;
   min-width: 0;

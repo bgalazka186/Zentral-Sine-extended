@@ -13,7 +13,7 @@
  * Loaded/created by: loader/ZentralCatalog.js
  * Published lazy ctx API: QUICK_SWITCH_BUILTIN_TARGETS; QUICK_SWITCH_CUSTOM_PREFS;
  *   QUICK_SWITCH_TARGET_PREF_PREFIX; SEARCH_CUSTOM_ENGINE_PREFS; applyForcePanelBlackVisual;
- *   buildSearchUrl; canPanelNavigate; ensureWebToolbar; forcePanelBlackState; getActiveAppBrowser;
+ *   buildSearchUrl; canPanelNavigate; panelHealth; panelHealthInfo; reloadPanelFromDot; syncHealthDot; ensureWebToolbar; forcePanelBlackState; getActiveAppBrowser;
  *   isValidQuickSwitchTemplate; looksLikeUrl; navigatePanelHistory; periodicFallbackPollingEnabled;
  *   refreshBrowserSearchTemplate; startWebToolbarPolling; syncSecondaryFallbackPolling;
  *   updateWebToolbarState
@@ -773,6 +773,25 @@
       });
       urlInput.addEventListener("focus", () => urlInput.select());
       urlWrap.appendChild(urlInput);
+      // Health dot: hidden while the page is fine; see panelHealth().
+      const healthDot = document.createElement("span");
+      healthDot.className = "zen-toolbar-health-dot";
+      healthDot.hidden = true;
+      healthDot.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        reloadPanelFromDot(getActiveAppBrowser());
+      });
+      healthDot.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        try {
+          window.ZentralRuntime?.copyDiagnostics?.();
+        } catch (error) {
+          console.warn("[Zentral] Copy diagnostics failed", error);
+        }
+      });
+      urlWrap.appendChild(healthDot);
 
       // Triple View style repair: deliberately manual and cheap. Automatic
       // health repair runs on the existing 2s panel tick; this button forces
@@ -941,6 +960,80 @@
       return true;
     }
 
+    // ---- panel health dot (edge of the URL field) ---------------------------------------------------------------
+    // States: ok (dot hidden) | loading | recovering | blank | asleep | failed. A pure function of plain facts about the
+    // page, so every state is unit-testable without a browser. `reloads` is how often the Triple View recovery has
+    // already loaded the page again (0 outside a recovery); 3 is its limit.
+    const HEALTH_RELOAD_LIMIT = 3;
+    function panelHealth(info) {
+      if (!info || info.connected === false) return { state: "none", reason: "" };
+      const blank = info.blank === true;
+      const reloads = Number(info.reloads) || 0;
+      if (blank && !info.loading && reloads >= HEALTH_RELOAD_LIMIT)
+        return { state: "failed", reason: "This panel is still empty after " + reloads + " automatic reloads. Click to reload it again." };
+      if (blank && reloads > 0)
+        return { state: "recovering", reason: "This panel was empty; reloading it (" + reloads + "/" + HEALTH_RELOAD_LIMIT + ")." };
+      if (info.loading) return { state: "loading", reason: "Loading…" };
+      if (info.pending === true)
+        return { state: "asleep", reason: "This panel is asleep to save memory. Click to wake it." };
+      if (blank) return { state: "blank", reason: "This panel shows no page. Click to reload it." };
+      if (info.hasWindowGlobal === false)
+        return { state: "asleep", reason: "This panel's page is not running. Click to reload it." };
+      if (info.active === false && info.visible === true)
+        return { state: "recovering", reason: "This panel's page is paused; waking it." };
+      return { state: "ok", reason: "" };
+    }
+    function panelHealthInfo(b) {
+      if (!b) return null;
+      const spec = (u) => !u || u === "about:blank";
+      let info = { connected: !!b.isConnected };
+      try {
+        info = {
+          connected: !!b.isConnected,
+          blank:
+            spec(b.currentURI?.spec) && spec(b.documentURI?.spec) && !b.contentTitle,
+          loading: !!b.webProgress?.isLoadingDocument,
+          pending: b.hasAttribute?.("pending") === true,
+          hasWindowGlobal: !!b.browsingContext?.currentWindowGlobal,
+          active: b.docShellIsActive,
+          visible: (b.getBoundingClientRect?.().height || 0) > 0,
+          reloads: Number(ctx.panelHealReloads?.(b)) || 0,
+        };
+      } catch (_) {}
+      return info;
+    }
+    function reloadPanelFromDot(b) {
+      if (!b) return;
+      try {
+        const spec = b.currentURI?.spec;
+        const target =
+          spec && spec !== "about:blank"
+            ? spec
+            : b._bgalazkaSuperPinReturnURL || "";
+        if (target) b.loadURI?.(Services.io.newURI(target), { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
+        else b.reload?.();
+      } catch (error) {
+        console.warn("[Zentral] Panel reload from the health dot failed", error);
+        try {
+          b.reload?.();
+        } catch (_) {}
+      }
+    }
+    function syncHealthDot(toolbar, b) {
+      const dot = toolbar.querySelector(".zen-toolbar-health-dot");
+      if (!dot) return;
+      const { state, reason } = panelHealth(panelHealthInfo(b));
+      const show = state !== "ok" && state !== "none";
+      if (dot.hidden === show) dot.hidden = !show;
+      if (dot.dataset.state !== state) dot.dataset.state = state;
+      const title = show ? reason + " (Right-click: copy diagnostics)" : "";
+      if (dot.title !== title) dot.title = title;
+    }
+    ctx.panelHealth = panelHealth;
+    ctx.panelHealthInfo = panelHealthInfo;
+    ctx.reloadPanelFromDot = reloadPanelFromDot;
+    ctx.syncHealthDot = syncHealthDot;
+
     // Refreshes back/forward enabled-state, the URL bar text (unless the user
     // is actively typing in it), and the zoom label, for whichever app browser
     // is currently active. Called after switching apps and on a light polling
@@ -998,6 +1091,8 @@
         curSpec = b?.currentURI?.spec || "";
       } catch (_) {}
 
+      syncHealthDot(toolbar, b);
+      ctx.syncSecondaryHealthDot?.();
       if (backBtn) backBtn.disabled = !canPanelNavigate(b, -1);
       if (fwdBtn) fwdBtn.disabled = !canPanelNavigate(b, 1);
 
